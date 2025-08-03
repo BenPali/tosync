@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tosyc - Watching together feels closer</title>
+
+    <!-- Socket.IO for real-time communication -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <!-- Our CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Tosyc</h1>
+            <p>Watching together feels closer :)</p>
+        </div>
+
+        <!-- Role Selection -->
+        <div class="section role-selector" id="roleSelector">
+            <h3>Choose Access Level</h3>
+            <p style="color: #718096; margin-bottom: 16px;">Select how you want to join this session</p>
+
+            <div class="role-buttons">
+                <button class="role-btn admin" id="adminBtn">
+                    <div style="font-weight: 600; margin-bottom: 4px;">Admin</div>
+                    <div style="font-size: 0.8rem; color: #718096;">Manage content</div>
+                </button>
+                <button class="role-btn guest" id="guestBtn">
+                    <div style="font-weight: 600; margin-bottom: 4px;">Guest</div>
+                    <div style="font-size: 0.8rem; color: #718096;">Watch & interact</div>
+                </button>
+            </div>
+
+            <!-- Admin Authentication -->
+            <div class="admin-auth hidden" id="adminAuth">
+                <h4 style="margin-bottom: 12px; color: #c53030;">Admin Authentication</h4>
+                <div class="form-group">
+                    <label for="adminPassword">Password:</label>
+                    <input type="password" id="adminPassword" placeholder="Enter admin password">
+                </div>
+                <button class="btn" id="authenticateBtn">Authenticate</button>
+                <button class="btn secondary" id="cancelAuthBtn">Cancel</button>
+                <div id="authError" class="alert error hidden">Incorrect password. Please try again.</div>
+            </div>
+
+            <!-- Guest Name Form -->
+            <div class="guest-name-form hidden" id="guestNameForm">
+                <h4 style="margin-bottom: 12px; color: #2b6cb0;">Guest Setup</h4>
+                <div class="form-group">
+                    <label for="guestName">Display Name (optional):</label>
+                    <input type="text" id="guestName" placeholder="Enter your name or leave blank for Anonymous">
+                </div>
+                <button class="btn" id="setGuestNameBtn">Continue as Guest</button>
+                <button class="btn secondary" id="cancelGuestBtn">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Main Application -->
+        <div id="mainApp" class="hidden">
+            <!-- Connection Status -->
+            <div class="connection-status" id="connectionStatus">
+                Connecting to server...
+            </div>
+
+            <!-- User Info -->
+            <div style="text-align: center; margin-bottom: 24px;">
+                <div class="role-indicator" id="roleIndicator"></div>
+                <div id="userInfo" style="color: #718096; font-size: 0.9rem;"></div>
+                <button class="btn secondary" id="resetRoleBtn"
+                    style="margin-top: 12px; font-size: 0.8rem; padding: 6px 12px;">Switch Role</button>
+            </div>
+
+            <!-- Admin Controls -->
+            <div class="section" id="adminControls">
+                <h3>Content Management</h3>
+
+
+
+                <div class="form-group">
+                    <label for="fileInput">Upload Video File (Recommended):</label>
+                    <input type="file" id="fileInput" accept=".mp4,.mkv,.avi,.webm,.mov" style="margin-bottom: 8px;">
+                    <small style="color: #718096;">Supports MP4, MKV, AVI, WebM, MOV - Up to 10GB</small>
+                </div>
+
+                <button class="btn" id="uploadBtn" style="background: #22c55e;">📁 Upload & Stream Video</button>
+                <button class="btn danger" id="clearMediaBtn">🗑️ Clear Media</button>
+
+                <div class="divider"></div>
+
+                <!-- Subtitle Upload -->
+                <details style="margin-top: 16px;">
+                    <summary style="cursor: pointer; font-weight: 500; color: #718096;">📝 Subtitle Management</summary>
+                    <div style="margin-top: 12px;">
+                        <div class="form-group">
+                            <label for="subtitleInput">Subtitle File:</label>
+                            <input type="file" id="subtitleInput" accept=".srt,.vtt,.ass,.ssa,.sub"
+                                style="margin-bottom: 8px;">
+                            <small style="color: #718096;">Supports SRT, VTT, ASS, SSA, SUB - Up to 5MB</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="subtitleLanguage">Language (optional):</label>
+                            <input type="text" id="subtitleLanguage" placeholder="e.g., English, Spanish, French">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="subtitleLabel">Display Name (optional):</label>
+                            <input type="text" id="subtitleLabel" placeholder="e.g., English SDH, Spanish">
+                        </div>
+
+                        <button class="btn secondary" id="uploadSubtitleBtn">📝 Upload Subtitle</button>
+
+
+                    </div>
+                </details>
+
+                <div class="divider"></div>
+
+                <!-- File Library -->
+                <details style="margin-top: 16px;">
+                    <summary style="cursor: pointer; font-weight: 500; color: #718096;">📚 File Library</summary>
+                    <div style="margin-top: 12px;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                            <button class="btn secondary" id="refreshLibraryBtn">🔄 Refresh Library</button>
+                        </div>
+                        <div id="libraryStatus" style="margin-top: 8px; font-size: 0.9rem; color: #718096;">Click
+                            refresh to load files</div>
+
+                        <!-- Uploaded Files -->
+                        <div id="uploadedFiles" style="margin-top: 16px;">
+                            <h4 style="margin-bottom: 8px; color: #2b6cb0;">📁 Uploaded Files</h4>
+                            <div id="uploadedFilesList" class="file-library-list"></div>
+                        </div>
+
+                        <!-- Downloaded Files -->
+                        <div id="downloadedFiles" style="margin-top: 16px;">
+                            <h4 style="margin-bottom: 8px; color: #22c55e;">⬇️ Downloaded Files</h4>
+                            <div id="downloadedFilesList" class="file-library-list"></div>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="divider"></div>
+
+                <details style="margin-top: 16px;">
+                    <summary style="cursor: pointer; font-weight: 500; color: #718096;">🧲 Advanced: Magnet Links
+                    </summary>
+                    <div style="margin-top: 12px;">
+                        <div class="form-group">
+                            <label for="torrentInput">Magnet Link:</label>
+                            <input type="text" id="torrentInput"
+                                placeholder="magnet:?xt=urn:btih:... (server-side streaming)">
+                        </div>
+                        <button class="btn secondary" id="loadTorrentBtn">⚡ Stream via Magnet Link</button>
+
+
+                    </div>
+                </details>
+            </div>
+
+            <!-- Player Section -->
+            <div class="section">
+                <h3>Player</h3>
+                <div class="alert success">
+                    <strong>🔄 Auto-Sync:</strong> Any play/pause action or time seeking is automatically synchronized
+                    with all users.
+                </div>
+                <div class="video-container">
+                    <video id="videoPlayer" controls preload="metadata" crossorigin="anonymous">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+
+                <!-- Basic Controls -->
+                <div class="controls">
+                    <button class="btn" id="togglePlayBtn">Play/Pause</button>
+                    <button class="btn" id="seekBackBtn">-10s</button>
+                    <button class="btn" id="seekForwardBtn">+10s</button>
+                    <button class="btn" id="fullscreenBtn">Fullscreen</button>
+                </div>
+
+                <!-- Admin Controls -->
+                <div id="adminPlayerControls" class="hidden">
+                    <div class="divider"></div>
+                    <div class="controls">
+                        <button class="btn secondary" id="syncTimeBtn">🔄 Force Sync</button>
+                        <button class="btn secondary" id="restartBtn">⏮️ Restart</button>
+                        <button class="btn secondary" id="rate05Btn">0.5x</button>
+                        <button class="btn secondary" id="rate1Btn">1x</button>
+                        <button class="btn secondary" id="rate15Btn">1.5x</button>
+                    </div>
+                </div>
+
+                <!-- Status Grid -->
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h4>Media Status</h4>
+                        <p id="mediaStatus">No media loaded</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="status-card">
+                        <h4>Room Status</h4>
+                        <p id="roomStatus">Connecting...</p>
+                        <p id="connectedUsers" style="font-size: 0.85rem; color: #718096; margin-top: 4px;">0 users</p>
+                    </div>
+
+                    <div class="status-card">
+                        <h4>Sync Status</h4>
+                        <p id="syncStatus">Initializing...</p>
+                        <p id="lastAction" style="font-size: 0.85rem; color: #718096; margin-top: 4px;">No recent
+                            actions
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Torrent Info -->
+                <div class="section hidden" id="torrentInfo">
+                    <h3>Torrent Details</h3>
+                    <div
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                        <div>
+                            <strong>Name:</strong> <span id="torrentName">-</span>
+                        </div>
+                        <div>
+                            <strong>Size:</strong> <span id="torrentSize">-</span>
+                        </div>
+                        <div>
+                            <strong>Downloaded:</strong> <span id="downloaded">-</span>
+                        </div>
+                        <div>
+                            <strong>Speed:</strong> <span id="downloadSpeed">-</span>
+                        </div>
+                        <div>
+                            <strong>Peers:</strong> <span id="numPeers">-</span>
+                        </div>
+                    </div>
+                    <div class="file-list" id="fileList"></div>
+                </div>
+
+                <!-- Subtitle Selection -->
+                <div class="section" id="subtitleSection" style="display: none;">
+                    <h3>Subtitles</h3>
+
+                    <div class="subtitles-list" id="subtitlesList">
+                        <div class="subtitle-option selected">
+                            <span>No Subtitles</span>
+                            <span style="color: #718096; font-size: 0.85rem;">Off</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connected Users -->
+                <div class="section">
+                    <h3>Connected Users</h3>
+                    <div class="users-list" id="usersList">
+                        <div class="user-item">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Our JavaScript -->
+        <script src="script.js"></script>
+</body>
+
+</html>
