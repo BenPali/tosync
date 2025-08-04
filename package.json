@@ -1,7 +1,7 @@
 {
-  "name": "tosyc-enhanced",
-  "version": "2.0.0",
-  "description": "Synchronized video streaming with torrent support",
+  "name": "tosync",
+  "version": "2.0.1",
+  "description": "Synchronized video streaming",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -16,8 +16,8 @@
     "webtorrent",
     "socket.io"
   ],
-  "author": "Tosyc Team",
-  "license": "ISC",
+  "author": "Ben Pali",
+  "license": "MIT",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",

@@ -1,4 +1,4 @@
-// script.js - Enhanced Tosyc Client with Torrent Streaming
+// script.js - Enhanced Tosync Client
 
 // Configuration
 // simple password to restrict access from your friends
@@ -1007,8 +1007,6 @@ async function loadFileLibrary() {
     }
 }
 
-
-
 function displayFileLibrary(library) {
     // Display uploaded files
     const uploadedList = document.getElementById('uploadedFilesList');
@@ -1097,8 +1095,6 @@ function playLibraryFile(fileUrl, fileName) {
     clearTorrentProgress();
     document.getElementById('torrentInfo').classList.add('hidden');
 }
-
-
 
 // Test subtitle loading
 function testSubtitleLoading() {
@@ -1531,8 +1527,6 @@ function initializeSubtitleSupport() {
         });
     });
 }
-
-
 
 // Setup UI event listeners
 function setupUIEventListeners() {

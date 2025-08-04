@@ -9,12 +9,16 @@ body {
     background: #f8f9fa;
     color: #2d3748;
     line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .container {
     max-width: 1000px;
     margin: 0 auto;
     padding: 20px;
+    flex: 1;
 }
 
 .header {
@@ -571,6 +575,7 @@ video {
     background: rgba(255, 255, 255, 0.3);
     border-radius: 2px;
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
 }
 
@@ -692,53 +697,6 @@ video {
     gap: 12px;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .container {
-        padding: 16px;
-    }
-
-    .role-buttons {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .role-btn {
-        width: 100%;
-        max-width: 280px;
-    }
-
-    .controls {
-        justify-content: center;
-    }
-
-    .status-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .video-controls {
-        padding: 12px;
-    }
-
-    .controls-main {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .controls-center {
-        order: -1;
-    }
-
-    .volume-slider {
-        width: 60px;
-    }
-
-    .subtitle-dropdown,
-    .speed-dropdown {
-        min-width: 120px;
-    }
-}
-
 /* File library styles */
 .file-library-list {
     background: #1a202c;
@@ -822,4 +780,133 @@ video {
 .library-file-item .play-button:disabled {
     background: #4a5568;
     cursor: not-allowed;
+}
+
+/* Footer Styles */
+.footer {
+    background: #1a202c;
+    color: #e2e8f0;
+    margin-top: 40px;
+    padding: 40px 0 20px 0;
+    border-top: 1px solid #2d3748;
+}
+
+.footer-content {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 30px;
+}
+
+.footer-section h4 {
+    color: #4299e1;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.footer-section p {
+    color: #a0aec0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.footer-links a {
+    color: #a0aec0;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.footer-links a:hover {
+    color: #4299e1;
+}
+
+.footer-disclaimer {
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.footer-bottom {
+    border-top: 1px solid #2d3748;
+    margin-top: 30px;
+    padding-top: 20px;
+    text-align: center;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+.footer-bottom p {
+    color: #718096;
+    font-size: 0.85rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: 16px;
+    }
+
+    .role-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .role-btn {
+        width: 100%;
+        max-width: 280px;
+    }
+
+    .controls {
+        justify-content: center;
+    }
+
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .video-controls {
+        padding: 12px;
+    }
+
+    .controls-main {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .controls-center {
+        order: -1;
+    }
+
+    .volume-slider {
+        width: 60px;
+    }
+
+    .subtitle-dropdown,
+    .speed-dropdown {
+        min-width: 120px;
+    }
+
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .footer {
+        padding: 30px 0 15px 0;
+    }
 }

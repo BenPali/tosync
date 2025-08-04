@@ -4,20 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tosyc - Watching together feels closer</title>
+    <title>Tosync - Watch together, stay connected</title>
 
     <!-- Socket.IO for real-time communication -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-    <!-- Our CSS -->
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
     <div class="container">
         <div class="header">
-            <h1>Tosyc</h1>
-            <p>Watching together feels closer :)</p>
+            <h1>Tosync</h1>
+            <p>Watch together, stay connected</p>
         </div>
 
         <!-- Role Selection -->
@@ -62,7 +61,6 @@
 
         <!-- Main Application -->
         <div id="mainApp" class="hidden">
-            <!-- Connection Status -->
             <div class="connection-status" id="connectionStatus">
                 Connecting to server...
             </div>
@@ -78,8 +76,6 @@
             <!-- Admin Controls -->
             <div class="section" id="adminControls">
                 <h3>Content Management</h3>
-
-
 
                 <div class="form-group">
                     <label for="fileInput">Upload Video File (Recommended):</label>
@@ -114,8 +110,6 @@
                         </div>
 
                         <button class="btn secondary" id="uploadSubtitleBtn">📝 Upload Subtitle</button>
-
-
                     </div>
                 </details>
 
@@ -151,14 +145,19 @@
                     <summary style="cursor: pointer; font-weight: 500; color: #718096;">🧲 Advanced: Magnet Links
                     </summary>
                     <div style="margin-top: 12px;">
+                        <div class="alert warning" style="margin-bottom: 16px;">
+                            <strong>⚠️ Legal Disclaimer:</strong> Users are solely responsible for the content they
+                            stream via torrent links. This platform does not host, store, or distribute any copyrighted
+                            content. Please ensure you have the legal right to access and share any torrents you use.
+                            The platform operators cannot be held liable for any misuse of this feature or copyright
+                            violations.
+                        </div>
                         <div class="form-group">
                             <label for="torrentInput">Magnet Link:</label>
                             <input type="text" id="torrentInput"
                                 placeholder="magnet:?xt=urn:btih:... (server-side streaming)">
                         </div>
                         <button class="btn secondary" id="loadTorrentBtn">⚡ Stream via Magnet Link</button>
-
-
                     </div>
                 </details>
             </div>
@@ -267,7 +266,56 @@
             </div>
         </div>
 
-        <!-- Our JavaScript -->
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Tosync</h4>
+                    <p>Watch together, stay connected</p>
+                    <p style="font-size: 0.8rem; color: #718096; margin-top: 8px;">
+                        Version 2.0.1 - Built with ❤️ by Ben Pali
+                    </p>
+                </div>
+
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <div class="footer-links">
+                        <a href="https://github.com/benpali/tosync" target="_blank" rel="noopener noreferrer">
+                            📂 GitHub Repository
+                        </a>
+                        <a href="https://github.com/benpali/tosync/issues" target="_blank" rel="noopener noreferrer">
+                            🐛 Report Issues
+                        </a>
+                        <a href="https://github.com/benpali/tosync/blob/main/README.md" target="_blank"
+                            rel="noopener noreferrer">
+                            📖 Documentation
+                        </a>
+                    </div>
+                </div>
+
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <div class="footer-disclaimer">
+                        <p style="font-size: 0.8rem; color: #718096;">
+                            This is a personal project for private usage purposes. Users are responsible for compliance
+                            with applicable laws and regulations when using torrent features.
+                        </p>
+                        <p style="font-size: 0.8rem; color: #718096; margin-top: 8px;">
+                            Released under
+                            <a href="https://github.com/benpali/tosync/blob/main/LICENSE" target="_blank"
+                                rel="noopener noreferrer">
+                                MIT License
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; 2025 Tosync. Made for friends and family. Use responsibly.</p>
+            </div>
+        </footer>
+
         <script src="script.js"></script>
 </body>
 

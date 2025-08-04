@@ -1,4 +1,4 @@
-// server.js - Enhanced Tosyc Backend Server with Torrent Streaming
+// server.js - Enhanced Tosync Backend Server
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -233,7 +233,7 @@ function convertSrtToVttFallback(srtContent) {
 // Room state management
 const rooms = new Map();
 const users = new Map();
-const DEFAULT_ROOM = 'tosyc-main';
+const DEFAULT_ROOM = 'tosync-main';
 
 // Initialize default room
 rooms.set(DEFAULT_ROOM, {
@@ -345,7 +345,6 @@ app.post('/api/torrents/add', async (req, res) => {
                 }))
             });
         }
-
 
         console.log('Adding new torrent:', magnetLink);
 
@@ -859,8 +858,6 @@ app.get('/api/library', (req, res) => {
 // Serve download files
 app.use('/downloads', express.static(downloadsDir));
 
-
-
 app.get('/stats', (req, res) => {
     try {
         const roomStats = Array.from(rooms.entries()).map(([roomId, room]) => ({
@@ -906,7 +903,7 @@ app.use((err, req, res, next) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🎬 Tosyc Server running on port ${PORT}`);
+    console.log(`🎬 Tosync Server running on port ${PORT}`);
     console.log(`📡 WebSocket server ready for connections`);
     console.log(`🌐 Access at: http://localhost:${PORT}`);
     console.log(`🧲 WebTorrent support enabled`);
@@ -938,7 +935,7 @@ const gracefulShutdown = (signal) => {
                 process.exit(1);
             } else {
                 console.log('HTTP server closed');
-                console.log('Tosyc server shut down gracefully');
+                console.log('Tosync server shut down gracefully');
                 process.exit(0);
             }
         });
