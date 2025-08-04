@@ -1,6 +1,7 @@
 # Tosync
 
 Watch videos together with friends and family in synchronization.
+Website: https://tosync.org
 
 ## Features
 
