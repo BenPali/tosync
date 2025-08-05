@@ -10,6 +10,123 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Additional styles for room functionality */
+        .room-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .room-option-card {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .room-option-card:hover {
+            border-color: #cbd5e0;
+            background: #edf2f7;
+        }
+
+        .room-option-card h4 {
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            color: #2d3748;
+        }
+
+        .room-option-card p {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .room-code-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: #2d3748;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            font-family: monospace;
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .room-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .room-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .room-badge span {
+            background: #2d3748;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+
+        .btn.small {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        .room-info {
+            background: #ebf8ff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #2b6cb0;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        #roomCodeInput {
+            text-align: center;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            font-family: monospace;
+            text-transform: uppercase;
+        }
+    </style>
 </head>
 
 <body>
@@ -19,10 +136,56 @@
             <p>Watch together, stay connected</p>
         </div>
 
-        <!-- Role Selection -->
-        <div class="section role-selector" id="roleSelector">
+        <!-- Room Selection -->
+        <div class="section room-selector" id="roomSelector">
+            <h3>Join or Create a Room</h3>
+            <p style="color: #718096; margin-bottom: 24px;">Start a new room or join an existing one</p>
+
+            <div class="room-options">
+                <!-- Create Room Option -->
+                <div class="room-option-card">
+                    <h4>🎬 Create New Room</h4>
+                    <p>Start your own viewing session as admin</p>
+                    <button class="btn" id="createRoomBtn">Create Room</button>
+                </div>
+
+                <!-- Join Room Option -->
+                <div class="room-option-card">
+                    <h4>🔗 Join Existing Room</h4>
+                    <p>Enter a room code to join</p>
+                    <div class="form-group">
+                        <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6"
+                            style="text-transform: uppercase;">
+                    </div>
+                    <button class="btn secondary" id="joinRoomBtn">Join Room</button>
+                    <div id="joinError" class="alert error hidden" style="margin-top: 12px;">Invalid room code. Please
+                        check and try again.</div>
+                </div>
+            </div>
+
+            <!-- Room Created Info -->
+            <div class="room-created-info hidden" id="roomCreatedInfo">
+                <div class="alert success">
+                    <h4 style="margin-bottom: 8px;">🎉 Room Created Successfully!</h4>
+                    <p style="margin-bottom: 12px;">Share this code with your friends:</p>
+                    <div class="room-code-display">
+                        <span id="roomCodeDisplay"></span>
+                        <button class="copy-btn" id="copyCodeBtn" title="Copy room code">📋</button>
+                    </div>
+                    <p style="font-size: 0.85rem; color: #22543d; margin-top: 12px;">
+                        Room URL: <span id="roomUrlDisplay"></span>
+                        <button class="copy-btn" id="copyUrlBtn" title="Copy room URL">📋</button>
+                    </p>
+                </div>
+                <button class="btn" id="proceedToRoomBtn" style="margin-top: 16px;">Continue to Room</button>
+            </div>
+        </div>
+
+        <!-- Role Selection (hidden initially) -->
+        <div class="section role-selector hidden" id="roleSelector">
             <h3>Choose Access Level</h3>
-            <p style="color: #718096; margin-bottom: 16px;">Select how you want to join this session</p>
+            <p style="color: #718096; margin-bottom: 8px;">Select how you want to join this session</p>
+            <p class="room-info" id="roomInfo"></p>
 
             <div class="role-buttons">
                 <button class="role-btn admin" id="adminBtn">
@@ -57,12 +220,23 @@
                 <button class="btn" id="setGuestNameBtn">Continue as Guest</button>
                 <button class="btn secondary" id="cancelGuestBtn">Cancel</button>
             </div>
+
+            <button class="btn secondary" id="backToRoomSelectBtn" style="margin-top: 20px;">← Back to Room
+                Selection</button>
         </div>
 
         <!-- Main Application -->
         <div id="mainApp" class="hidden">
             <div class="connection-status" id="connectionStatus">
                 Connecting to server...
+            </div>
+
+            <!-- Room Header -->
+            <div class="room-header">
+                <div class="room-badge">
+                    Room: <span id="currentRoomCode"></span>
+                </div>
+                <button class="btn secondary small" id="leaveRoomBtn">Leave Room</button>
             </div>
 
             <!-- User Info -->
@@ -167,7 +341,7 @@
                 <h3>Player</h3>
                 <div class="alert success">
                     <strong>🔄 Auto-Sync:</strong> Any play/pause action or time seeking is automatically synchronized
-                    with all users.
+                    with all users in this room.
                 </div>
                 <div class="video-container">
                     <video id="videoPlayer" controls preload="metadata" crossorigin="anonymous">
@@ -273,7 +447,7 @@
                     <h4>Tosync</h4>
                     <p>Watch together, stay connected</p>
                     <p style="font-size: 0.8rem; color: #718096; margin-top: 8px;">
-                        Version 2.0.1 - Built with ❤️ by Ben Pali
+                        Version 2.1.0 - Built with ❤️ by Ben Pali
                     </p>
                 </div>
 
@@ -316,7 +490,8 @@
             </div>
         </footer>
 
-        <script src="script.js"></script>
+        <!-- Load the main JavaScript module -->
+        <script type="module" src="js/main.js"></script>
 </body>
 
 </html>

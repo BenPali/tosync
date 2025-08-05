@@ -233,21 +233,10 @@ function convertSrtToVttFallback(srtContent) {
 // Room state management
 const rooms = new Map();
 const users = new Map();
-const DEFAULT_ROOM = 'tosync-main';
 
-// Initialize default room
-rooms.set(DEFAULT_ROOM, {
-    users: new Map(),
-    currentMedia: null,
-    videoState: {
-        isPlaying: false,
-        currentTime: 0,
-        playbackRate: 1
-    },
-    adminId: null,
-    currentTorrent: null,
-    subtitles: [] // Array of available subtitle tracks
-});
+// Room cleanup settings
+const ROOM_INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const ROOM_CLEANUP_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes
 
 // File upload endpoint
 app.post('/upload', (req, res) => {
@@ -316,17 +305,18 @@ app.post('/upload-subtitle', (req, res) => {
 
 // Torrent endpoints
 app.post('/api/torrents/add', async (req, res) => {
-    const { magnetLink, roomId = DEFAULT_ROOM } = req.body;
+    const { magnetLink, roomId } = req.body;
 
     if (!magnetLink || !magnetLink.startsWith('magnet:')) {
         return res.status(400).json({ error: 'Invalid magnet link' });
     }
 
+    if (!roomId || !rooms.has(roomId)) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
+
     try {
         const room = rooms.get(roomId);
-        if (!room) {
-            return res.status(404).json({ error: 'Room not found' });
-        }
 
         // Check if torrent already exists
         const existingTorrent = torrentClient.get(magnetLink);
@@ -498,8 +488,39 @@ io.on('connection', (socket) => {
     // User joins room
     socket.on('join-room', (userData) => {
         try {
-            const { userName, userRole } = userData;
-            const roomId = DEFAULT_ROOM;
+            const { roomId, userName, userRole, isCreator } = userData;
+
+            if (!roomId || roomId.length !== 6) {
+                socket.emit('error', { message: 'Invalid room code' });
+                return;
+            }
+
+            // Create room if it doesn't exist
+            if (!rooms.has(roomId)) {
+                if (isCreator || userRole === 'admin') {
+                    // Create new room
+                    rooms.set(roomId, {
+                        id: roomId,
+                        users: new Map(),
+                        currentMedia: null,
+                        videoState: {
+                            isPlaying: false,
+                            currentTime: 0,
+                            playbackRate: 1
+                        },
+                        adminId: null,
+                        currentTorrent: null,
+                        subtitles: [],
+                        createdAt: Date.now(),
+                        lastActivity: Date.now()
+                    });
+                    console.log(`Room created: ${roomId}`);
+                } else {
+                    // Room doesn't exist and user is not creator
+                    socket.emit('room-not-found');
+                    return;
+                }
+            }
 
             socket.join(roomId);
 
@@ -515,8 +536,9 @@ io.on('connection', (socket) => {
 
             const room = rooms.get(roomId);
             room.users.set(socket.id, user);
+            room.lastActivity = Date.now();
 
-            if (userRole === 'admin' && !room.adminId) {
+            if (userRole === 'admin' && (!room.adminId || isCreator)) {
                 room.adminId = socket.id;
             }
 
@@ -561,6 +583,8 @@ io.on('connection', (socket) => {
             const room = rooms.get(user.room);
             if (!room) return;
 
+            room.lastActivity = Date.now();
+
             const { action, time, playbackRate } = data;
 
             switch (action) {
@@ -589,7 +613,7 @@ io.on('connection', (socket) => {
                 timestamp: Date.now()
             });
 
-            console.log(`${user.name} performed: ${action} at ${time}s`);
+            console.log(`${user.name} performed: ${action} at ${time}s in room ${user.room}`);
         } catch (error) {
             console.error('Error in video-action:', error);
         }
@@ -606,6 +630,8 @@ io.on('connection', (socket) => {
 
             const room = rooms.get(user.room);
             if (!room) return;
+
+            room.lastActivity = Date.now();
 
             const { action, mediaData } = data;
 
@@ -634,7 +660,7 @@ io.on('connection', (socket) => {
                         playbackRate: 1
                     };
                     if (room.currentTorrent) {
-                        room.currentTorrent.destroy();
+                        // Note: We don't destroy the torrent here as it might be used by other rooms
                         room.currentTorrent = null;
                     }
                     break;
@@ -646,7 +672,7 @@ io.on('connection', (socket) => {
                 user: user.name
             });
 
-            console.log(`${user.name} performed media action: ${action}`);
+            console.log(`${user.name} performed media action: ${action} in room ${user.room}`);
         } catch (error) {
             console.error('Error in media-action:', error);
             socket.emit('error', { message: 'Failed to perform media action' });
@@ -674,6 +700,7 @@ io.on('connection', (socket) => {
             const room = rooms.get(user.room);
             if (!room) return;
 
+            room.lastActivity = Date.now();
             room.videoState.currentTime = data.time || 0;
             room.videoState.isPlaying = data.isPlaying || false;
 
@@ -683,7 +710,7 @@ io.on('connection', (socket) => {
                 user: user.name
             });
 
-            console.log(`${user.name} forced sync at ${data.time}s`);
+            console.log(`${user.name} forced sync at ${data.time}s in room ${user.room}`);
         } catch (error) {
             console.error('Error in force-sync:', error);
         }
@@ -698,6 +725,8 @@ io.on('connection', (socket) => {
             const room = rooms.get(user.room);
             if (!room) return;
 
+            room.lastActivity = Date.now();
+
             // Add subtitle to room's subtitle list
             room.subtitles.push(data.subtitle);
 
@@ -707,7 +736,7 @@ io.on('connection', (socket) => {
                 user: user.name
             });
 
-            console.log(`${user.name} added subtitle: ${data.subtitle.label}`);
+            console.log(`${user.name} added subtitle: ${data.subtitle.label} in room ${user.room}`);
         } catch (error) {
             console.error('Error in subtitle-upload:', error);
         }
@@ -722,13 +751,15 @@ io.on('connection', (socket) => {
             const room = rooms.get(user.room);
             if (!room) return;
 
+            room.lastActivity = Date.now();
+
             // Broadcast subtitle selection to other users
             socket.to(user.room).emit('subtitle-selected', {
                 subtitleId: data.subtitleId,
                 user: user.name
             });
 
-            console.log(`${user.name} selected subtitle: ${data.subtitleId}`);
+            console.log(`${user.name} selected subtitle: ${data.subtitleId} in room ${user.room}`);
         } catch (error) {
             console.error('Error in subtitle-select:', error);
         }
@@ -761,7 +792,12 @@ io.on('connection', (socket) => {
                         userCount: room.users.size
                     });
 
-                    console.log(`${user.name} disconnected from ${user.room}`);
+                    console.log(`${user.name} disconnected from room ${user.room}`);
+
+                    // Check if room is empty
+                    if (room.users.size === 0) {
+                        console.log(`Room ${user.room} is now empty`);
+                    }
                 }
 
                 users.delete(socket.id);
@@ -772,9 +808,62 @@ io.on('connection', (socket) => {
     });
 });
 
+// Room cleanup function
+function cleanupInactiveRooms() {
+    const now = Date.now();
+    const roomsToDelete = [];
+
+    rooms.forEach((room, roomId) => {
+        // Check if room is empty and has been inactive
+        if (room.users.size === 0 && (now - room.lastActivity) > ROOM_INACTIVITY_TIMEOUT) {
+            roomsToDelete.push(roomId);
+        }
+    });
+
+    roomsToDelete.forEach(roomId => {
+        const room = rooms.get(roomId);
+        
+        // Clean up any torrents associated with this room
+        if (room.currentTorrent) {
+            // Check if torrent is used by other rooms
+            let torrentUsedElsewhere = false;
+            rooms.forEach((otherRoom, otherRoomId) => {
+                if (otherRoomId !== roomId && otherRoom.currentTorrent === room.currentTorrent) {
+                    torrentUsedElsewhere = true;
+                }
+            });
+
+            if (!torrentUsedElsewhere) {
+                // Safe to destroy the torrent
+                room.currentTorrent.destroy({ destroyStore: true });
+            }
+        }
+
+        rooms.delete(roomId);
+        console.log(`Cleaned up inactive room: ${roomId}`);
+    });
+}
+
+// Set up periodic room cleanup
+setInterval(cleanupInactiveRooms, ROOM_CLEANUP_INTERVAL);
+
 // API endpoints
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Catch-all route for room URLs
+app.get('/:roomCode', (req, res) => {
+    const roomCode = req.params.roomCode;
+    
+    // Validate room code format (6 characters)
+    if (roomCode && roomCode.length === 6) {
+        // Serve the main index.html, the client will handle the room joining
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    } else {
+        // Invalid room code, redirect to home
+        res.redirect('/');
+    }
 });
 
 // Get file library
@@ -858,18 +947,22 @@ app.get('/api/library', (req, res) => {
 // Serve download files
 app.use('/downloads', express.static(downloadsDir));
 
-app.get('/stats', (req, res) => {
+app.get('/api/stats', (req, res) => {
     try {
         const roomStats = Array.from(rooms.entries()).map(([roomId, room]) => ({
             roomId,
             userCount: room.users.size,
             hasMedia: !!room.currentMedia,
             adminPresent: !!room.adminId,
-            hasTorrent: !!room.currentTorrent
+            hasTorrent: !!room.currentTorrent,
+            createdAt: room.createdAt,
+            lastActivity: room.lastActivity
         }));
 
         res.json({
             totalUsers: users.size,
+            totalRooms: rooms.size,
+            activeRooms: roomStats.filter(r => r.userCount > 0).length,
             rooms: roomStats,
             activeTorrents: activeTorrents.size,
             uptime: process.uptime()
@@ -887,9 +980,19 @@ setInterval(() => {
 
     activeTorrents.forEach((info, hash) => {
         if (now - info.addedAt > maxAge && info.torrent.done) {
-            info.torrent.destroy({ destroyStore: true });
-            activeTorrents.delete(hash);
-            console.log(`Cleaned up old torrent: ${hash}`);
+            // Check if torrent is still in use by any room
+            let inUse = false;
+            rooms.forEach(room => {
+                if (room.currentTorrent && room.currentTorrent.infoHash === hash) {
+                    inUse = true;
+                }
+            });
+
+            if (!inUse) {
+                info.torrent.destroy({ destroyStore: true });
+                activeTorrents.delete(hash);
+                console.log(`Cleaned up old torrent: ${hash}`);
+            }
         }
     });
 }, 60 * 60 * 1000);
@@ -907,6 +1010,7 @@ server.listen(PORT, () => {
     console.log(`📡 WebSocket server ready for connections`);
     console.log(`🌐 Access at: http://localhost:${PORT}`);
     console.log(`🧲 WebTorrent support enabled`);
+    console.log(`🚪 Room-based system active`);
 });
 
 // Graceful shutdown
