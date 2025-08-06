@@ -1,6 +1,6 @@
 {
   "name": "tosync",
-  "version": "2.0.1",
+  "version": "2.1.2",
   "description": "Synchronized video streaming",
   "main": "server.js",
   "type": "module",

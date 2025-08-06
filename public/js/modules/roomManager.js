@@ -19,18 +19,10 @@ export class RoomManager {
         state.currentRoomId = roomCode;
         state.isRoomCreator = true;
 
-        // Display room creation info
-        document.getElementById('roomCodeDisplay').textContent = roomCode;
-        const roomUrl = `${window.location.origin}/${roomCode}`;
-        document.getElementById('roomUrlDisplay').textContent = roomUrl;
+        window.history.pushState({ roomId: roomCode, isRoomCreator: true }, '', `/${roomCode}`);
 
-        document.getElementById('roomSelector').querySelector('h3').style.display = 'none';
-        document.getElementById('roomSelector').querySelector('p').style.display = 'none';
-        document.querySelector('.room-options').classList.add('hidden');
-        document.getElementById('roomCreatedInfo').classList.remove('hidden');
-
-        // Update URL without reloading
-        window.history.pushState({ roomId: roomCode }, '', `/${roomCode}`);
+        document.getElementById('roomSelector').classList.add('hidden');
+        authManager.setRole('admin', 'Room Creator');
     }
 
     joinRoom() {
@@ -44,23 +36,62 @@ export class RoomManager {
         state.currentRoomId = roomCode;
         state.isRoomCreator = false;
 
-        // Update URL without reloading
-        window.history.pushState({ roomId: roomCode }, '', `/${roomCode}`);
+        window.history.pushState({ roomId: roomCode, isRoomCreator: false }, '', `/${roomCode}`);
 
-        // Check if room exists by proceeding to role selection
-        this.proceedToRoleSelection();
+        this.showGuestNameForm();
+    }
+
+    showGuestNameForm() {
+        document.getElementById('roomSelector').classList.add('hidden');
+
+        const guestFormHtml = `
+            <div class="section" id="guestJoinForm" style="max-width: 500px; margin: 40px auto;">
+                <h3>Join Room ${state.currentRoomId}</h3>
+                <p style="color: #718096; margin-bottom: 24px;">Enter your name to join the room</p>
+
+                <div class="form-group">
+                    <label for="guestNameJoin">Your Name:</label>
+                    <input type="text" id="guestNameJoin" placeholder="Enter your name or leave blank for Anonymous">
+                </div>
+
+                <button class="btn" id="joinAsGuestBtn">Join Room</button>
+                <button class="btn secondary" id="backToRoomSelectFromGuestBtn">Cancel</button>
+
+                <div id="guestJoinError" class="alert error hidden" style="margin-top: 12px;">Room not found. Please check the code and try again.</div>
+            </div>
+        `;
+
+        const existingForm = document.getElementById('guestJoinForm');
+        if (existingForm) existingForm.remove();
+
+        const roomSelector = document.getElementById('roomSelector');
+        roomSelector.insertAdjacentHTML('afterend', guestFormHtml);
+
+        document.getElementById('joinAsGuestBtn').addEventListener('click', () => {
+            const name = document.getElementById('guestNameJoin').value.trim() || 'Anonymous';
+            authManager.setRole('guest', name);
+            document.getElementById('guestJoinForm').remove();
+        });
+
+        document.getElementById('backToRoomSelectFromGuestBtn').addEventListener('click', () => {
+            document.getElementById('guestJoinForm').remove();
+            this.backToRoomSelect();
+        });
+
+        document.getElementById('guestNameJoin').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const name = document.getElementById('guestNameJoin').value.trim() || 'Anonymous';
+                authManager.setRole('guest', name);
+                document.getElementById('guestJoinForm').remove();
+            }
+        });
+
+        document.getElementById('guestNameJoin').focus();
     }
 
     proceedToRoleSelection() {
-        document.getElementById('roomSelector').classList.add('hidden');
-        document.getElementById('roleSelector').classList.remove('hidden');
-
-        // Update room info display
-        document.getElementById('roomInfo').textContent = `Room Code: ${state.currentRoomId}`;
-
-        // If user is room creator, automatically set them as admin
-        if (state.isRoomCreator) {
-            authManager.setRole('admin', 'Room Creator');
+        if (!state.isRoomCreator) {
+            this.showGuestNameForm();
         }
     }
 
@@ -83,7 +114,6 @@ export class RoomManager {
             state.socket = null;
         }
 
-        // Reset state
         state.currentRoomId = null;
         state.isRoomCreator = false;
         state.currentTorrentInfo = null;
@@ -95,23 +125,20 @@ export class RoomManager {
         state.userName = "Anonymous";
         state.isConnected = false;
 
-        // Clear URL
         window.history.pushState({}, '', '/');
 
-        // Reset UI
+        const guestJoinForm = document.getElementById('guestJoinForm');
+        if (guestJoinForm) guestJoinForm.remove();
+
         document.getElementById('mainApp').classList.add('hidden');
         document.getElementById('roleSelector').classList.add('hidden');
         document.getElementById('roomSelector').classList.remove('hidden');
-        document.getElementById('roomCreatedInfo').classList.add('hidden');
         document.querySelector('.room-options').classList.remove('hidden');
         document.getElementById('roomSelector').querySelector('h3').style.display = 'block';
         document.getElementById('roomSelector').querySelector('p').style.display = 'block';
 
-        // Clear form inputs
         document.getElementById('roomCodeInput').value = '';
         document.getElementById('joinError').classList.add('hidden');
-        document.getElementById('adminPassword').value = '';
-        document.getElementById('guestName').value = '';
         document.getElementById('torrentInput').value = '';
         document.getElementById('fileInput').value = '';
 
@@ -119,12 +146,34 @@ export class RoomManager {
     }
 
     backToRoomSelect() {
+        const guestJoinForm = document.getElementById('guestJoinForm');
+        if (guestJoinForm) guestJoinForm.remove();
+
         document.getElementById('roleSelector').classList.add('hidden');
         document.getElementById('roomSelector').classList.remove('hidden');
         state.currentRoomId = null;
         state.isRoomCreator = false;
 
-        // Clear URL
         window.history.pushState({}, '', '/');
     }
+}
+
+export function setupPopStateHandler(roomManagerInstance) {
+    window.addEventListener('popstate', (event) => {
+        const roomId = event.state?.roomId;
+        const isRoomCreator = event.state?.isRoomCreator ?? false;
+
+        if (roomId) {
+            state.currentRoomId = roomId;
+            state.isRoomCreator = isRoomCreator;
+
+            if (isRoomCreator) {
+                authManager.setRole('admin', 'Room Creator');
+            } else {
+                roomManagerInstance.showGuestNameForm();
+            }
+        } else {
+            roomManagerInstance.backToRoomSelect();
+        }
+    });
 }

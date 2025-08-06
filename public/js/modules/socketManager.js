@@ -29,9 +29,11 @@ export class SocketManager {
 
         state.socket.on('room-not-found', () => {
             console.log('Room not found');
-            document.getElementById('joinError').textContent = 'Room not found. Please check the code and try again.';
-            document.getElementById('joinError').classList.remove('hidden');
-            authManager.resetRole();
+            const guestJoinError = document.getElementById('guestJoinError');
+            if (guestJoinError) {
+                guestJoinError.classList.remove('hidden');
+            }
+            // Don't reset role since user hasn't set one yet
         });
 
         state.socket.on('room-state', (data) => {

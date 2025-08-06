@@ -45,36 +45,6 @@
             margin-bottom: 20px;
         }
 
-        .room-code-display {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            background: #2d3748;
-            color: white;
-            padding: 16px 24px;
-            border-radius: 8px;
-            font-size: 1.5rem;
-            font-weight: 600;
-            letter-spacing: 2px;
-            font-family: monospace;
-        }
-
-        .copy-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.2s;
-            color: white;
-            font-size: 1rem;
-        }
-
-        .copy-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
         .room-header {
             display: flex;
             justify-content: space-between;
@@ -102,21 +72,17 @@
             border-radius: 20px;
             font-family: monospace;
             letter-spacing: 1px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .room-badge span:hover {
+            background: #4a5568;
         }
 
         .btn.small {
             padding: 6px 12px;
             font-size: 0.85rem;
-        }
-
-        .room-info {
-            background: #ebf8ff;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            color: #2b6cb0;
-            margin-bottom: 16px;
-            text-align: center;
         }
 
         #roomCodeInput {
@@ -152,7 +118,7 @@
                 <!-- Join Room Option -->
                 <div class="room-option-card">
                     <h4>🔗 Join Existing Room</h4>
-                    <p>Enter a room code to join</p>
+                    <p>Enter a room code to join or paste URL</p>
                     <div class="form-group">
                         <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="6"
                             style="text-transform: uppercase;">
@@ -162,68 +128,10 @@
                         check and try again.</div>
                 </div>
             </div>
-
-            <!-- Room Created Info -->
-            <div class="room-created-info hidden" id="roomCreatedInfo">
-                <div class="alert success">
-                    <h4 style="margin-bottom: 8px;">🎉 Room Created Successfully!</h4>
-                    <p style="margin-bottom: 12px;">Share this code with your friends:</p>
-                    <div class="room-code-display">
-                        <span id="roomCodeDisplay"></span>
-                        <button class="copy-btn" id="copyCodeBtn" title="Copy room code">📋</button>
-                    </div>
-                    <p style="font-size: 0.85rem; color: #22543d; margin-top: 12px;">
-                        Room URL: <span id="roomUrlDisplay"></span>
-                        <button class="copy-btn" id="copyUrlBtn" title="Copy room URL">📋</button>
-                    </p>
-                </div>
-                <button class="btn" id="proceedToRoomBtn" style="margin-top: 16px;">Continue to Room</button>
-            </div>
         </div>
 
-        <!-- Role Selection (hidden initially) -->
-        <div class="section role-selector hidden" id="roleSelector">
-            <h3>Choose Access Level</h3>
-            <p style="color: #718096; margin-bottom: 8px;">Select how you want to join this session</p>
-            <p class="room-info" id="roomInfo"></p>
-
-            <div class="role-buttons">
-                <button class="role-btn admin" id="adminBtn">
-                    <div style="font-weight: 600; margin-bottom: 4px;">Admin</div>
-                    <div style="font-size: 0.8rem; color: #718096;">Manage content</div>
-                </button>
-                <button class="role-btn guest" id="guestBtn">
-                    <div style="font-weight: 600; margin-bottom: 4px;">Guest</div>
-                    <div style="font-size: 0.8rem; color: #718096;">Watch & interact</div>
-                </button>
-            </div>
-
-            <!-- Admin Authentication -->
-            <div class="admin-auth hidden" id="adminAuth">
-                <h4 style="margin-bottom: 12px; color: #c53030;">Admin Authentication</h4>
-                <div class="form-group">
-                    <label for="adminPassword">Password:</label>
-                    <input type="password" id="adminPassword" placeholder="Enter admin password">
-                </div>
-                <button class="btn" id="authenticateBtn">Authenticate</button>
-                <button class="btn secondary" id="cancelAuthBtn">Cancel</button>
-                <div id="authError" class="alert error hidden">Incorrect password. Please try again.</div>
-            </div>
-
-            <!-- Guest Name Form -->
-            <div class="guest-name-form hidden" id="guestNameForm">
-                <h4 style="margin-bottom: 12px; color: #2b6cb0;">Guest Setup</h4>
-                <div class="form-group">
-                    <label for="guestName">Display Name (optional):</label>
-                    <input type="text" id="guestName" placeholder="Enter your name or leave blank for Anonymous">
-                </div>
-                <button class="btn" id="setGuestNameBtn">Continue as Guest</button>
-                <button class="btn secondary" id="cancelGuestBtn">Cancel</button>
-            </div>
-
-            <button class="btn secondary" id="backToRoomSelectBtn" style="margin-top: 20px;">← Back to Room
-                Selection</button>
-        </div>
+        <!-- Hidden role selector (kept for compatibility but not used) -->
+        <div class="section role-selector hidden" id="roleSelector"></div>
 
         <!-- Main Application -->
         <div id="mainApp" class="hidden">
@@ -234,7 +142,7 @@
             <!-- Room Header -->
             <div class="room-header">
                 <div class="room-badge">
-                    Room: <span id="currentRoomCode"></span>
+                    Room: <span id="currentRoomCode" title="Click to copy room URL"></span>
                 </div>
                 <button class="btn secondary small" id="leaveRoomBtn">Leave Room</button>
             </div>
@@ -447,7 +355,7 @@
                     <h4>Tosync</h4>
                     <p>Watch together, stay connected</p>
                     <p style="font-size: 0.8rem; color: #718096; margin-top: 8px;">
-                        Version 2.1.0 - Built with ❤️ by Ben Pali
+                        Version 2.1.2 - Built with ❤️ by Ben Pali
                     </p>
                 </div>
 

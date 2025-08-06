@@ -5,46 +5,15 @@ import { config } from '../config.js';
 import { socketManager, videoPlayer, torrentManager, uiManager } from '../main.js';
 
 export class AuthManager {
-    selectAdmin() {
-        if (state.isRoomCreator) {
-            // Room creator doesn't need password
-            this.setRole('admin', 'Room Creator');
-        } else {
-            document.getElementById('adminAuth').classList.remove('hidden');
-            document.getElementById('guestNameForm').classList.add('hidden');
-        }
-    }
-
-    selectGuest() {
-        document.getElementById('guestNameForm').classList.remove('hidden');
-        document.getElementById('adminAuth').classList.add('hidden');
-    }
-
-    cancelAuth() {
-        document.getElementById('adminAuth').classList.add('hidden');
-        document.getElementById('guestNameForm').classList.add('hidden');
-        document.getElementById('authError').classList.add('hidden');
-    }
-
-    authenticateAdmin() {
-        const password = document.getElementById('adminPassword').value;
-
-        if (password === config.ADMIN_PASSWORD) {
-            this.setRole('admin', 'Admin');
-        } else {
-            document.getElementById('authError').classList.remove('hidden');
-            document.getElementById('adminPassword').value = '';
-        }
-    }
-
-    setGuestName() {
-        const name = document.getElementById('guestName').value.trim() || 'Anonymous';
-        this.setRole('guest', name);
-    }
-
     setRole(role, name) {
         state.userRole = role;
         state.userName = name;
+
+        // Clean up any existing guest join form
+        const guestJoinForm = document.getElementById('guestJoinForm');
+        if (guestJoinForm) {
+            guestJoinForm.remove();
+        }
 
         document.getElementById('roleSelector').classList.add('hidden');
         document.getElementById('mainApp').classList.remove('hidden');
@@ -90,13 +59,8 @@ export class AuthManager {
 
         document.getElementById('mainApp').classList.add('hidden');
         document.getElementById('roleSelector').classList.remove('hidden');
-        document.getElementById('adminAuth').classList.add('hidden');
-        document.getElementById('guestNameForm').classList.add('hidden');
-        document.getElementById('authError').classList.add('hidden');
         document.getElementById('torrentInfo').classList.add('hidden');
 
-        document.getElementById('adminPassword').value = '';
-        document.getElementById('guestName').value = '';
         document.getElementById('torrentInput').value = '';
         document.getElementById('fileInput').value = '';
 
