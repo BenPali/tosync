@@ -15,14 +15,77 @@ export class RoomManager {
     }
 
     createRoom() {
+        // Prompt admin for their name
+        this.showAdminNamePrompt();
+    }
+
+    showAdminNamePrompt() {
+        // Hide room selector and show admin name form
+        document.getElementById('roomSelector').classList.add('hidden');
+
+        const adminNameFormHtml = `
+            <div class="section" id="adminNameForm" style="max-width: 500px; margin: 40px auto;">
+                <h3>Create New Room</h3>
+                <p style="color: #718096; margin-bottom: 24px;">Enter your name to create a room as admin</p>
+
+                <div class="form-group">
+                    <label for="adminNameInput">Your Name:</label>
+                    <input type="text" id="adminNameInput" placeholder="Enter your name (default: Admin)" 
+                           style="text-align: center;">
+                </div>
+
+                <button class="btn" id="createRoomWithNameBtn">🎬 Create Room</button>
+                <button class="btn secondary" id="backToRoomSelectFromAdminBtn">Cancel</button>
+
+                <div class="alert success" style="margin-top: 16px;">
+                    <strong>✨ As room creator:</strong> You'll have admin privileges to upload videos, manage subtitles, control playback, and manage users.
+                </div>
+            </div>
+        `;
+
+        const existingForm = document.getElementById('adminNameForm');
+        if (existingForm) existingForm.remove();
+
+        const roomSelector = document.getElementById('roomSelector');
+        roomSelector.insertAdjacentHTML('afterend', adminNameFormHtml);
+
+        // Add event listeners
+        document.getElementById('createRoomWithNameBtn').addEventListener('click', () => {
+            this.proceedWithRoomCreation();
+        });
+
+        document.getElementById('backToRoomSelectFromAdminBtn').addEventListener('click', () => {
+            this.backToRoomSelect();
+        });
+
+        // Allow Enter key to create room
+        document.getElementById('adminNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.proceedWithRoomCreation();
+            }
+        });
+
+        // Focus on input field
+        document.getElementById('adminNameInput').focus();
+    }
+
+    proceedWithRoomCreation() {
+        const adminNameInput = document.getElementById('adminNameInput');
+        const adminName = adminNameInput.value.trim() || 'Admin';
+
+        // Generate room code
         const roomCode = this.generateRoomCode();
         state.currentRoomId = roomCode;
         state.isRoomCreator = true;
 
+        // Update browser URL
         window.history.pushState({ roomId: roomCode, isRoomCreator: true }, '', `/${roomCode}`);
 
-        document.getElementById('roomSelector').classList.add('hidden');
-        authManager.setRole('admin', 'Room Creator');
+        // Clean up form
+        document.getElementById('adminNameForm').remove();
+
+        // Set role with custom name
+        authManager.setRole('admin', adminName);
     }
 
     joinRoom() {
@@ -127,8 +190,12 @@ export class RoomManager {
 
         window.history.pushState({}, '', '/');
 
+        // Clean up any forms
         const guestJoinForm = document.getElementById('guestJoinForm');
         if (guestJoinForm) guestJoinForm.remove();
+
+        const adminNameForm = document.getElementById('adminNameForm');
+        if (adminNameForm) adminNameForm.remove();
 
         document.getElementById('mainApp').classList.add('hidden');
         document.getElementById('roleSelector').classList.add('hidden');
@@ -146,8 +213,12 @@ export class RoomManager {
     }
 
     backToRoomSelect() {
+        // Clean up any forms
         const guestJoinForm = document.getElementById('guestJoinForm');
         if (guestJoinForm) guestJoinForm.remove();
+
+        const adminNameForm = document.getElementById('adminNameForm');
+        if (adminNameForm) adminNameForm.remove();
 
         document.getElementById('roleSelector').classList.add('hidden');
         document.getElementById('roomSelector').classList.remove('hidden');
@@ -168,7 +239,7 @@ export function setupPopStateHandler(roomManagerInstance) {
             state.isRoomCreator = isRoomCreator;
 
             if (isRoomCreator) {
-                authManager.setRole('admin', 'Room Creator');
+                authManager.setRole('admin', 'Admin');
             } else {
                 roomManagerInstance.showGuestNameForm();
             }

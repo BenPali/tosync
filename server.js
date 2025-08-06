@@ -498,7 +498,6 @@ io.on('connection', (socket) => {
             // Create room if it doesn't exist
             if (!rooms.has(roomId)) {
                 if (isCreator || userRole === 'admin') {
-                    // Create new room
                     rooms.set(roomId, {
                         id: roomId,
                         users: new Map(),
@@ -516,14 +515,42 @@ io.on('connection', (socket) => {
                     });
                     console.log(`Room created: ${roomId}`);
                 } else {
-                    // Room doesn't exist and user is not creator
                     socket.emit('room-not-found');
                     return;
                 }
             }
 
+            const room = rooms.get(roomId);
+
+            // CRITICAL: Clean up any existing user with this socket ID first
+            if (users.has(socket.id)) {
+                const oldUser = users.get(socket.id);
+                console.log(`Cleaning up existing user ${oldUser.name} for socket ${socket.id}`);
+
+                // Remove from old room if different
+                if (oldUser.room && oldUser.room !== roomId && rooms.has(oldUser.room)) {
+                    const oldRoom = rooms.get(oldUser.room);
+                    oldRoom.users.delete(socket.id);
+                    console.log(`Removed user from old room: ${oldUser.room}`);
+                }
+
+                // Remove from current room
+                if (room.users.has(socket.id)) {
+                    room.users.delete(socket.id);
+                    console.log(`Removed user from current room: ${roomId}`);
+                }
+
+                users.delete(socket.id);
+            }
+
+            // Also remove from current room if exists (double safety)
+            if (room.users.has(socket.id)) {
+                room.users.delete(socket.id);
+            }
+
             socket.join(roomId);
 
+            // Create fresh user object
             const user = {
                 id: socket.id,
                 name: userName,
@@ -532,17 +559,27 @@ io.on('connection', (socket) => {
                 joinedAt: new Date()
             };
 
-            users.set(socket.id, user);
+            // Check for name conflicts with OTHER users (not including this socket)
+            const existingUserWithSameName = Array.from(room.users.values())
+                .find(u => u.name === userName && u.id !== socket.id);
 
-            const room = rooms.get(roomId);
+            if (existingUserWithSameName) {
+                const modifiedName = `${userName}_${Math.floor(Math.random() * 1000)}`;
+                console.log(`Name conflict: ${userName} changed to ${modifiedName}`);
+                user.name = modifiedName;
+            }
+
+            // Add user to maps
+            users.set(socket.id, user);
             room.users.set(socket.id, user);
             room.lastActivity = Date.now();
 
+            // Set admin if appropriate
             if (userRole === 'admin' && (!room.adminId || isCreator)) {
                 room.adminId = socket.id;
             }
 
-            console.log(`${userName} (${userRole}) joined room: ${roomId}`);
+            console.log(`${user.name} (${userRole}) joined room: ${roomId} [Socket: ${socket.id}]`);
 
             // Send room state to new user
             socket.emit('room-state', {
@@ -559,20 +596,24 @@ io.on('connection', (socket) => {
                 subtitles: room.subtitles
             });
 
+            // Notify others
             socket.to(roomId).emit('user-joined', {
                 user: user,
                 userCount: room.users.size
             });
 
+            // Send clean users list to everyone
             io.to(roomId).emit('users-update', {
                 users: Array.from(room.users.values()),
                 userCount: room.users.size
             });
+
         } catch (error) {
             console.error('Error in join-room:', error);
             socket.emit('error', { message: 'Failed to join room' });
         }
     });
+
 
     // Handle video actions
     socket.on('video-action', (data) => {
@@ -774,36 +815,186 @@ io.on('connection', (socket) => {
             if (user) {
                 const room = rooms.get(user.room);
                 if (room) {
+                    // Remove user from room
                     room.users.delete(socket.id);
 
+                    // Handle admin transfer if needed
                     if (room.adminId === socket.id) {
                         const adminUsers = Array.from(room.users.values()).filter(u => u.role === 'admin');
                         room.adminId = adminUsers.length > 0 ? adminUsers[0].id : null;
                     }
 
+                    // Notify remaining users
                     socket.to(user.room).emit('user-left', {
                         user: user,
                         userCount: room.users.size,
                         newAdminId: room.adminId
                     });
 
+                    // Send updated users list
                     socket.to(user.room).emit('users-update', {
                         users: Array.from(room.users.values()),
                         userCount: room.users.size
                     });
 
                     console.log(`${user.name} disconnected from room ${user.room}`);
-
-                    // Check if room is empty
-                    if (room.users.size === 0) {
-                        console.log(`Room ${user.room} is now empty`);
-                    }
                 }
 
+                // Remove from global users map
                 users.delete(socket.id);
             }
         } catch (error) {
             console.error('Error handling disconnect:', error);
+        }
+    });
+
+    // Handle admin transfer
+    socket.on('transfer-admin', (data) => {
+        try {
+            const user = users.get(socket.id);
+            if (!user || user.role !== 'admin') {
+                socket.emit('transfer-admin-error', { message: 'Only admins can transfer permissions' });
+                return;
+            }
+
+            const room = rooms.get(user.room);
+            if (!room) {
+                socket.emit('transfer-admin-error', { message: 'Room not found' });
+                return;
+            }
+
+            const { targetUserName } = data;
+
+            // Find the target user in the room by name
+            const targetUser = Array.from(room.users.values())
+                .find(u => u.name === targetUserName && u.role === 'guest');
+
+            if (!targetUser) {
+                socket.emit('transfer-admin-error', { message: 'Target user not found or is already an admin' });
+                return;
+            }
+
+            // Update roles
+            user.role = 'guest';
+            targetUser.role = 'admin';
+            room.adminId = targetUser.id;
+            room.lastActivity = Date.now();
+
+            // Update users map
+            users.set(user.id, user);
+            users.set(targetUser.id, targetUser);
+
+            console.log(`Admin transferred from ${user.name} to ${targetUser.name} in room ${user.room}`);
+
+            // Send specific notifications to the involved users
+            socket.emit('admin-transferred', {
+                newAdminName: targetUser.name,
+                formerAdminName: user.name,
+                isYouFormerAdmin: true,
+                isYouNewAdmin: false
+            });
+
+            io.to(targetUser.id).emit('admin-transferred', {
+                newAdminName: targetUser.name,
+                formerAdminName: user.name,
+                isYouFormerAdmin: false,
+                isYouNewAdmin: true
+            });
+
+            // Notify other users in the room (excluding the two involved)
+            socket.to(user.room).emit('admin-transferred', {
+                newAdminName: targetUser.name,
+                formerAdminName: user.name,
+                isYouFormerAdmin: false,
+                isYouNewAdmin: false
+            });
+
+            // Update users list for all clients
+            io.to(user.room).emit('users-update', {
+                users: Array.from(room.users.values()),
+                userCount: room.users.size
+            });
+
+        } catch (error) {
+            console.error('Error in transfer-admin:', error);
+            socket.emit('transfer-admin-error', { message: 'Failed to transfer admin rights' });
+        }
+    });
+
+    // Handle user kick
+    socket.on('kick-user', (data) => {
+        try {
+            const admin = users.get(socket.id);
+            if (!admin || admin.role !== 'admin') {
+                socket.emit('kick-user-error', { message: 'Only admins can kick users' });
+                return;
+            }
+
+            const room = rooms.get(admin.room);
+            if (!room) {
+                socket.emit('kick-user-error', { message: 'Room not found' });
+                return;
+            }
+
+            const { targetUserName } = data;
+
+            // Find the target user in the room by name
+            const targetUser = Array.from(room.users.values())
+                .find(u => u.name === targetUserName);
+
+            if (!targetUser) {
+                socket.emit('kick-user-error', { message: 'Target user not found' });
+                return;
+            }
+
+            if (targetUser.id === admin.id) {
+                socket.emit('kick-user-error', { message: 'Cannot kick yourself' });
+                return;
+            }
+
+            // Remove user from room and users map
+            room.users.delete(targetUser.id);
+            users.delete(targetUser.id);
+            room.lastActivity = Date.now();
+
+            console.log(`${targetUser.name} was kicked from room ${admin.room} by ${admin.name}`);
+
+            // Notify the kicked user
+            io.to(targetUser.id).emit('user-kicked', {
+                kickedUserName: targetUser.name,
+                kickedByAdmin: admin.name,
+                isYouKicked: true
+            });
+
+            // Disconnect the kicked user
+            const kickedSocket = io.sockets.sockets.get(targetUser.id);
+            if (kickedSocket) {
+                kickedSocket.disconnect(true);
+            }
+
+            // Notify remaining users in the room
+            socket.to(admin.room).emit('user-kicked', {
+                kickedUserName: targetUser.name,
+                kickedByAdmin: admin.name,
+                isYouKicked: false
+            });
+
+            // Update users list for remaining clients
+            io.to(admin.room).emit('users-update', {
+                users: Array.from(room.users.values()),
+                userCount: room.users.size
+            });
+
+            // Send confirmation to admin
+            socket.emit('user-kicked', {
+                kickedUserName: targetUser.name,
+                kickedByAdmin: admin.name,
+                isYouKicked: false
+            });
+
+        } catch (error) {
+            console.error('Error in kick-user:', error);
+            socket.emit('kick-user-error', { message: 'Failed to kick user' });
         }
     });
 });
@@ -822,7 +1013,7 @@ function cleanupInactiveRooms() {
 
     roomsToDelete.forEach(roomId => {
         const room = rooms.get(roomId);
-        
+
         // Clean up any torrents associated with this room
         if (room.currentTorrent) {
             // Check if torrent is used by other rooms
@@ -855,7 +1046,7 @@ app.get('/', (req, res) => {
 // Catch-all route for room URLs
 app.get('/:roomCode', (req, res) => {
     const roomCode = req.params.roomCode;
-    
+
     // Validate room code format (6 characters)
     if (roomCode && roomCode.length === 6) {
         // Serve the main index.html, the client will handle the room joining

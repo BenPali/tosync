@@ -117,6 +117,29 @@ export class SocketManager {
             console.log('Subtitle selected:', data.subtitleId);
             uiManager.updateLastAction(`${data.user} selected subtitle`);
         });
+
+        // Admin transfer events
+        state.socket.on('admin-transferred', (data) => {
+            console.log('Admin transferred:', data);
+            authManager.handleAdminTransferred(data);
+        });
+
+        state.socket.on('transfer-admin-error', (data) => {
+            console.log('Admin transfer error:', data.message);
+            uiManager.showError(data.message);
+        });
+
+        // User kick events
+        state.socket.on('user-kicked', (data) => {
+            console.log('User kicked:', data);
+            authManager.handleUserKicked(data);
+        });
+
+        state.socket.on('kick-user-error', (data) => {
+            console.log('Kick user error:', data.message);
+            uiManager.showError(data.message);
+        });
+
     }
 
     // Send video actions to server
