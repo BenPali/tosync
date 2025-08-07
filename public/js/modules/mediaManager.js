@@ -29,6 +29,7 @@ export class MediaManager {
 
         const formData = new FormData();
         formData.append('video', file);
+        formData.append('roomId', state.currentRoomId);
 
         const xhr = new XMLHttpRequest();
 
@@ -105,7 +106,7 @@ export class MediaManager {
 
         xhr.timeout = config.UPLOAD_TIMEOUT;
 
-        xhr.open('POST', '/upload');
+        xhr.open('POST', `/upload?roomId=${encodeURIComponent(state.currentRoomId)}`);
         xhr.send(formData);
     }
 

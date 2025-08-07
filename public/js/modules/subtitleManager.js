@@ -59,6 +59,7 @@ export class SubtitleManager {
 
         const formData = new FormData();
         formData.append('subtitle', file);
+        formData.append('roomId', state.currentRoomId);
         formData.append('language', language);
         formData.append('label', label);
 
@@ -113,7 +114,7 @@ export class SubtitleManager {
 
         xhr.timeout = config.SUBTITLE_TIMEOUT;
 
-        xhr.open('POST', '/upload-subtitle');
+        xhr.open('POST', `/upload-subtitle?roomId=${encodeURIComponent(state.currentRoomId)}`)
         xhr.send(formData);
     }
 
@@ -203,6 +204,7 @@ export class SubtitleManager {
             track.addEventListener('load', () => {
                 console.log('Subtitle track loaded successfully:', subtitle.label);
 
+                // Wait a bit longer for track to be fully ready
                 setTimeout(() => {
                     const tracks = Array.from(state.videoPlayer.textTracks);
                     console.log('Available tracks after load:', tracks.length);
@@ -210,24 +212,30 @@ export class SubtitleManager {
                     const ourTrack = tracks.find(t => t.label === subtitle.label);
 
                     if (ourTrack) {
+                        // Force track to showing mode
                         ourTrack.mode = 'showing';
                         console.log('Subtitle track enabled, mode:', ourTrack.mode);
-                        uiManager.updateLastAction(`Subtitle enabled: ${subtitle.label}`);
+                        console.log('Track readyState:', ourTrack.readyState);
+                        console.log('Track cues:', ourTrack.cues ? ourTrack.cues.length : 'null');
 
-                        // Check if subtitles are working
-                        setTimeout(() => {
-                            this.checkSubtitleVisibility();
-                        }, 1000);
+                        // If still no cues, try to force a reload
+                        if (!ourTrack.cues || ourTrack.cues.length === 0) {
+                            console.warn('No cues loaded, checking track src:', track.src);
+
+                            // Try fetching the subtitle file directly to debug
+                            fetch(track.src)
+                                .then(res => res.text())
+                                .then(content => {
+                                    console.log('Fetched subtitle content preview:', content.substring(0, 300));
+                                })
+                                .catch(err => console.error('Error fetching subtitle:', err));
+                        }
+
+                        uiManager.updateLastAction(`Subtitle enabled: ${subtitle.label}`);
                     } else {
                         console.warn('Could not find our track in textTracks');
-                        // Try to enable the first available track
-                        if (tracks.length > 0) {
-                            tracks[0].mode = 'showing';
-                            console.log('Enabled first available track:', tracks[0].label);
-                            uiManager.updateLastAction(`Subtitle enabled: ${tracks[0].label}`);
-                        }
                     }
-                }, 100);
+                }, 500); // Increased delay
             });
 
             track.addEventListener('error', (e) => {

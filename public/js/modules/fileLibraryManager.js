@@ -14,7 +14,7 @@ export class FileLibraryManager {
         statusElement.textContent = 'Loading file library...';
 
         try {
-            const response = await fetch('/api/library');
+            const response = await fetch(`/api/library/${state.currentRoomId}`);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }

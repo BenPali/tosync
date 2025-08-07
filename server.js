@@ -31,34 +31,53 @@ const io = new Server(server, {
 const torrentClient = new WebTorrent();
 const activeTorrents = new Map();
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir);
+// Create rooms base directory if it doesn't exist
+const roomsDir = path.join(__dirname, 'rooms');
+if (!fs.existsSync(roomsDir)) {
+    fs.mkdirSync(roomsDir);
 }
 
-// Create downloads directory if it doesn't exist
-const downloadsDir = path.join(__dirname, 'downloads');
-if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir);
+// Helper function to ensure room directories exist
+function ensureRoomDirectories(roomId) {
+    const roomDir = path.join(roomsDir, roomId);
+    const videosDir = path.join(roomDir, 'videos');
+    const subtitlesDir = path.join(roomDir, 'subtitles');
+
+    if (!fs.existsSync(roomDir)) {
+        fs.mkdirSync(roomDir, { recursive: true });
+    }
+    if (!fs.existsSync(videosDir)) {
+        fs.mkdirSync(videosDir, { recursive: true });
+    }
+    if (!fs.existsSync(subtitlesDir)) {
+        fs.mkdirSync(subtitlesDir, { recursive: true });
+    }
+
+    return { roomDir, videosDir, subtitlesDir };
 }
 
-// Create subtitles directory if it doesn't exist
-const subtitlesDir = path.join(__dirname, 'subtitles');
-if (!fs.existsSync(subtitlesDir)) {
-    fs.mkdirSync(subtitlesDir);
-}
-
-// Configure multer for file uploads
+// Configure multer for file uploads with room-based storage
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadsDir);
+    destination: (req, file, cb) => {
+        const roomId = req.query.roomId;
+        if (!roomId) {
+            return cb(new Error('Room ID is required'));
+        }
+
+        const isSubtitle = file.mimetype === 'application/x-subrip';
+        const folder = isSubtitle ? 'subtitles' : 'videos';
+        const uploadPath = path.join(roomsDir, roomId, folder);
+
+        fs.mkdirSync(uploadPath, { recursive: true });
+        cb(null, uploadPath);
     },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
+    filename: (req, file, cb) => {
+        const isSubtitle = file.mimetype === 'application/x-subrip';
+        const filename = isSubtitle ? 'subtitle.srt' : file.originalname;
+        cb(null, filename);
     }
 });
+
 
 const upload = multer({
     storage: storage,
@@ -78,9 +97,14 @@ const upload = multer({
     }
 });
 
-// Configure multer for subtitle uploads
+// Configure multer for subtitle uploads with room-based storage
 const subtitleStorage = multer.diskStorage({
     destination: function (req, file, cb) {
+        const roomId = req.body.roomId || req.query.roomId;
+        if (!roomId) {
+            return cb(new Error('Room ID is required'));
+        }
+        const { subtitlesDir } = ensureRoomDirectories(roomId);
         cb(null, subtitlesDir);
     },
     filename: function (req, file, cb) {
@@ -114,10 +138,20 @@ app.use(express.json());
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(uploadsDir));
+
+// Serve room-based video files
+app.use('/rooms/:roomId/videos', (req, res, next) => {
+    const roomId = req.params.roomId;
+    const videosDir = path.join(roomsDir, roomId, 'videos');
+    if (fs.existsSync(videosDir)) {
+        express.static(videosDir)(req, res, next);
+    } else {
+        res.status(404).json({ error: 'Room not found' });
+    }
+});
 
 // Serve subtitle files with conversion and proper MIME types
-app.use('/subtitles', async (req, res, next) => {
+app.use('/rooms/:roomId/subtitles/:filename', async (req, res, next) => {
     try {
         // Set CORS headers
         res.header('Access-Control-Allow-Origin', '*');
@@ -129,8 +163,10 @@ app.use('/subtitles', async (req, res, next) => {
             return res.status(200).end();
         }
 
-        const ext = path.extname(req.path).toLowerCase();
-        const filePath = path.join(subtitlesDir, req.path);
+        const { roomId, filename } = req.params;
+        const subtitlesDir = path.join(roomsDir, roomId, 'subtitles');
+        const filePath = path.join(subtitlesDir, filename);
+        const ext = path.extname(filename).toLowerCase();
 
         // Check if file exists
         if (!fs.existsSync(filePath)) {
@@ -143,34 +179,22 @@ app.use('/subtitles', async (req, res, next) => {
         // If it's an SRT file, convert it to VTT
         if (ext === '.srt') {
             try {
-                console.log(`Converting SRT to VTT: ${req.path}`);
+                console.log(`Converting SRT to VTT: ${filename} in room ${roomId}`);
 
                 // Read the SRT file
                 const srtContent = fs.readFileSync(filePath, 'utf8');
 
-                // Parse SRT content
-                const parsedSubtitles = subtitle.parse(srtContent);
+                // Use the fallback conversion which is more reliable
+                const vttContent = convertSrtToVttFallback(srtContent);
 
-                // Convert to VTT format
-                const vttContent = subtitle.stringify(parsedSubtitles, { format: 'WebVTT' });
-
-                // Ensure it starts with WEBVTT header
-                const finalVttContent = vttContent.startsWith('WEBVTT') ? vttContent : `WEBVTT\n\n${vttContent}`;
-
-                console.log(`Successfully converted SRT to VTT: ${req.path}`);
+                console.log(`Successfully converted SRT to VTT: ${filename}`);
 
                 // Send the converted content
-                res.send(finalVttContent);
+                res.send(vttContent);
 
             } catch (conversionError) {
-                console.error(`Error converting SRT to VTT for ${req.path}:`, conversionError);
-
-                // Fallback: try to serve the original SRT file
-                const srtContent = fs.readFileSync(filePath, 'utf8');
-
-                // Simple SRT to VTT conversion as fallback
-                const fallbackVtt = convertSrtToVttFallback(srtContent);
-                res.send(fallbackVtt);
+                console.error(`Error converting SRT to VTT for ${filename}:`, conversionError);
+                res.status(500).json({ error: 'Failed to convert subtitle file' });
             }
         } else if (ext === '.vtt') {
             // Already VTT, serve directly
@@ -199,34 +223,44 @@ app.use('/subtitles', async (req, res, next) => {
 // Fallback SRT to VTT conversion function
 function convertSrtToVttFallback(srtContent) {
     try {
-        // Simple regex-based conversion
+        // Start with WEBVTT header
         let vttContent = 'WEBVTT\n\n';
 
-        // Split into subtitle blocks
-        const blocks = srtContent.split(/\n\s*\n/).filter(block => block.trim());
+        // Normalize line endings
+        const normalizedSrt = srtContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+        // Split into subtitle blocks (handling various formats)
+        const blocks = normalizedSrt.split(/\n\n+/).filter(block => block.trim());
 
         blocks.forEach(block => {
             const lines = block.split('\n').filter(line => line.trim());
 
-            if (lines.length >= 3) {
-                // Skip the subtitle number (first line)
-                const timestampLine = lines[1];
-                const subtitleText = lines.slice(2).join('\n');
+            if (lines.length >= 2) {
+                // Find the timestamp line (contains --> )
+                let timestampIndex = lines.findIndex(line => line.includes('-->'));
 
-                // Convert timestamp format from SRT to VTT
-                const convertedTimestamp = timestampLine
-                    .replace(/(\d{2}):(\d{2}):(\d{2}),(\d{3})/g, '$1:$2:$3.$4');
+                if (timestampIndex !== -1) {
+                    const timestampLine = lines[timestampIndex];
+                    const subtitleLines = lines.slice(timestampIndex + 1);
 
-                vttContent += `${convertedTimestamp}\n${subtitleText}\n\n`;
+                    // Convert timestamp format from SRT (,) to VTT (.)
+                    const convertedTimestamp = timestampLine
+                        .replace(/,/g, '.');  // Replace comma with period
+
+                    if (subtitleLines.length > 0) {
+                        vttContent += `${convertedTimestamp}\n${subtitleLines.join('\n')}\n\n`;
+                    }
+                }
             }
         });
 
+        console.log(`Converted SRT to VTT, length: ${vttContent.length} chars`);
         return vttContent;
 
     } catch (error) {
         console.error('Fallback SRT to VTT conversion failed:', error);
-        // Return minimal VTT if conversion fails
-        return 'WEBVTT\n\n';
+        // Return minimal valid VTT if conversion fails
+        return 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nSubtitle conversion failed\n\n';
     }
 }
 
@@ -235,8 +269,8 @@ const rooms = new Map();
 const users = new Map();
 
 // Room cleanup settings
-const ROOM_INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-const ROOM_CLEANUP_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes
+const ROOM_INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const ROOM_CLEANUP_INTERVAL = 60 * 1000; // Check every minute
 
 // File upload endpoint
 app.post('/upload', (req, res) => {
@@ -259,14 +293,16 @@ app.post('/upload', (req, res) => {
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
+        const roomId = req.body.roomId || req.query.roomId;
         const fileInfo = {
             filename: req.file.filename,
             originalName: req.file.originalname,
             size: req.file.size,
-            url: `/uploads/${req.file.filename}`
+            url: `/rooms/${roomId}/videos/${req.file.filename}`,  // <-- FIXED
+            roomId: roomId
         };
 
-        console.log('File uploaded successfully:', fileInfo.originalName);
+        console.log('File uploaded successfully:', fileInfo.originalName, 'to room:', roomId);
         res.json(fileInfo);
     });
 });
@@ -289,16 +325,18 @@ app.post('/upload-subtitle', (req, res) => {
             return res.status(400).json({ error: 'No subtitle file uploaded' });
         }
 
+        const roomId = req.body.roomId || req.query.roomId;
         const subtitleInfo = {
             filename: req.file.filename,
             originalName: req.file.originalname,
             size: req.file.size,
-            url: `/subtitles/${req.file.filename}`,
+            url: `/rooms/${roomId}/subtitles/${req.file.filename}`,
             language: req.body.language || 'Unknown',
-            label: req.body.label || req.file.originalname
+            label: req.body.label || req.file.originalname,
+            roomId: roomId
         };
 
-        console.log('Subtitle uploaded successfully:', subtitleInfo.originalName);
+        console.log('Subtitle uploaded successfully:', subtitleInfo.originalName, 'to room:', roomId);
         res.json(subtitleInfo);
     });
 });
@@ -339,8 +377,9 @@ app.post('/api/torrents/add', async (req, res) => {
         console.log('Adding new torrent:', magnetLink);
 
         // Add new torrent
+        const { videosDir } = ensureRoomDirectories(roomId);
         const torrent = torrentClient.add(magnetLink, {
-            path: path.join(__dirname, 'downloads'),
+            path: videosDir,
             strategy: 'sequential'
         });
 
@@ -1030,6 +1069,18 @@ function cleanupInactiveRooms() {
             }
         }
 
+        // Delete room folder immediately (room has already been inactive for 5 minutes)
+        const roomDir = path.join(roomsDir, roomId);
+        if (fs.existsSync(roomDir)) {
+            fs.rm(roomDir, { recursive: true, force: true }, (err) => {
+                if (err) {
+                    console.error(`Error deleting room directory ${roomId}:`, err);
+                } else {
+                    console.log(`Deleted room directory: ${roomId}`);
+                }
+            });
+        }
+
         rooms.delete(roomId);
         console.log(`Cleaned up inactive room: ${roomId}`);
     });
@@ -1057,68 +1108,74 @@ app.get('/:roomCode', (req, res) => {
     }
 });
 
-// Get file library
-app.get('/api/library', (req, res) => {
+// Get file library for a specific room
+app.get('/api/library/:roomId', (req, res) => {
     try {
+        const { roomId } = req.params;
+        const { videosDir, subtitlesDir } = ensureRoomDirectories(roomId);
+
         const library = {
-            uploads: [],
-            downloads: []
+            uploads: [],  // All videos are now in the same folder
+            downloads: []  // Keep structure for compatibility, but both will scan same folder
         };
 
-        // Scan uploads directory
-        if (fs.existsSync(uploadsDir)) {
-            const uploadFiles = fs.readdirSync(uploadsDir);
-            uploadFiles.forEach(filename => {
-                const filePath = path.join(uploadsDir, filename);
+        // Scan room's videos directory (contains both uploads and downloads)
+        if (fs.existsSync(videosDir)) {
+            const videoFiles = fs.readdirSync(videosDir);
+            videoFiles.forEach(filename => {
+                const filePath = path.join(videosDir, filename);
                 const stats = fs.statSync(filePath);
 
                 if (stats.isFile()) {
                     const ext = path.extname(filename).toLowerCase();
                     if (['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.mpg', '.mpeg'].includes(ext)) {
-                        library.uploads.push({
+                        const fileInfo = {
                             filename: filename,
-                            originalName: filename.replace(/^\d+-\d+-/, ''), // Remove timestamp prefix
+                            originalName: filename.replace(/^\d+-\d+-/, ''),
                             size: stats.size,
-                            url: `/uploads/${filename}`,
-                            type: 'upload',
+                            url: `/rooms/${roomId}/videos/${filename}`,
+                            type: 'video',
                             addedAt: stats.mtime
-                        });
+                        };
+
+                        // For backward compatibility, add to both arrays
+                        // You can later update the client to use a single array
+                        library.uploads.push(fileInfo);
                     }
                 }
             });
-        }
 
-        // Scan downloads directory
-        if (fs.existsSync(downloadsDir)) {
-            const downloadFolders = fs.readdirSync(downloadsDir);
-            downloadFolders.forEach(folderName => {
-                const folderPath = path.join(downloadsDir, folderName);
-                const stats = fs.statSync(folderPath);
+            // Also check for torrent folders (they might create subfolders)
+            const items = fs.readdirSync(videosDir);
+            items.forEach(item => {
+                const itemPath = path.join(videosDir, item);
+                const stats = fs.statSync(itemPath);
 
                 if (stats.isDirectory()) {
+                    // This might be a torrent folder
                     try {
-                        const files = fs.readdirSync(folderPath);
-                        const videoFiles = files.filter(filename => {
-                            const ext = path.extname(filename).toLowerCase();
-                            return ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.mpg', '.mpeg'].includes(ext);
-                        });
-
-                        videoFiles.forEach(filename => {
-                            const filePath = path.join(folderPath, filename);
+                        const files = fs.readdirSync(itemPath);
+                        files.forEach(filename => {
+                            const filePath = path.join(itemPath, filename);
                             const fileStats = fs.statSync(filePath);
 
-                            library.downloads.push({
-                                filename: filename,
-                                originalName: filename,
-                                folderName: folderName,
-                                size: fileStats.size,
-                                url: `/downloads/${encodeURIComponent(folderName)}/${encodeURIComponent(filename)}`,
-                                type: 'download',
-                                addedAt: fileStats.mtime
-                            });
+                            if (fileStats.isFile()) {
+                                const ext = path.extname(filename).toLowerCase();
+                                if (['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.mpg', '.mpeg'].includes(ext)) {
+                                    library.downloads.push({
+                                        filename: filename,
+                                        originalName: filename,
+                                        folderName: item,
+                                        size: fileStats.size,
+                                        url: `/rooms/${roomId}/videos/${encodeURIComponent(item)}/${encodeURIComponent(filename)}`,
+                                        type: 'download',
+                                        addedAt: fileStats.mtime
+                                    });
+                                }
+                            }
                         });
                     } catch (error) {
-                        console.error(`Error reading folder ${folderName}:`, error);
+                        console.error(`Error reading folder ${item}:`, error);
                     }
                 }
             });
@@ -1134,9 +1191,6 @@ app.get('/api/library', (req, res) => {
         res.status(500).json({ error: 'Failed to get library' });
     }
 });
-
-// Serve download files
-app.use('/downloads', express.static(downloadsDir));
 
 app.get('/api/stats', (req, res) => {
     try {
