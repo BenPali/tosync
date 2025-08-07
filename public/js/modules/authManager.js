@@ -55,24 +55,33 @@ export class AuthManager {
     }
 
     /**
-     * Handle admin role transfer from server
+     * Simple admin transfer handler
      */
     handleAdminTransferred(data) {
-        const { newAdminName, formerAdminName, isYouNewAdmin, isYouFormerAdmin } = data;
+        const { newAdminName, formerAdminName, isYouNewAdmin, isYouFormerAdmin, reason } = data;
 
         if (isYouNewAdmin) {
-            // You are now the admin - update your role immediately
+            // You are now the admin
             state.userRole = 'admin';
             this.updateUIForRole('admin', state.userName);
-            uiManager.updateLastAction(`You are now the admin (transferred from ${formerAdminName})`);
+
+            if (reason === 'admin-left') {
+                uiManager.updateLastAction(`You are now the admin (${formerAdminName} left)`);
+            } else {
+                uiManager.updateLastAction(`You are now the admin (transferred from ${formerAdminName})`);
+            }
         } else if (isYouFormerAdmin) {
-            // You are now a guest - update your role immediately
+            // You are now a guest
             state.userRole = 'guest';
             this.updateUIForRole('guest', state.userName);
             uiManager.updateLastAction(`Admin rights transferred to ${newAdminName}`);
         } else {
             // You are observing the transfer
-            uiManager.updateLastAction(`${formerAdminName} transferred admin rights to ${newAdminName}`);
+            if (reason === 'admin-left') {
+                uiManager.updateLastAction(`${formerAdminName} left. ${newAdminName} is now admin.`);
+            } else {
+                uiManager.updateLastAction(`${formerAdminName} transferred admin rights to ${newAdminName}`);
+            }
         }
 
         // Hide any open user management menu

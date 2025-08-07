@@ -83,8 +83,18 @@ export class SocketManager {
             uiManager.updateLastAction(`${data.user.name} joined (${data.user.role})`);
         });
 
+        // Enhanced user-left handler that supports admin succession
         state.socket.on('user-left', (data) => {
-            uiManager.updateLastAction(`${data.user.name} left`);
+            console.log('User left event:', data);
+
+            // Check if this event indicates admin succession
+            if (data.adminChanged && data.newAdminId === state.socket?.id) {
+                console.log('Current user promoted to admin due to admin departure');
+                authManager.handleUserLeft(data);
+            } else {
+                // Regular user departure
+                uiManager.updateLastAction(`${data.user.name} left`);
+            }
         });
 
         state.socket.on('force-sync', (data) => {
@@ -118,9 +128,9 @@ export class SocketManager {
             uiManager.updateLastAction(`${data.user} selected subtitle`);
         });
 
-        // Admin transfer events
+        // Enhanced admin transfer events with better logging
         state.socket.on('admin-transferred', (data) => {
-            console.log('Admin transferred:', data);
+            console.log('Admin transferred event received:', data);
             authManager.handleAdminTransferred(data);
         });
 
@@ -131,7 +141,7 @@ export class SocketManager {
 
         // User kick events
         state.socket.on('user-kicked', (data) => {
-            console.log('User kicked:', data);
+            console.log('User kicked event:', data);
             authManager.handleUserKicked(data);
         });
 
@@ -140,6 +150,36 @@ export class SocketManager {
             uiManager.showError(data.message);
         });
 
+        // Connection health monitoring
+        state.socket.on('ping', () => {
+            console.log('Ping received from server');
+        });
+
+        state.socket.on('pong', (latency) => {
+            console.log(`Pong received, latency: ${latency}ms`);
+        });
+
+        // Enhanced error handling
+        state.socket.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+            uiManager.updateConnectionStatus('Connection failed', 'disconnected');
+        });
+
+        state.socket.on('reconnect', (attemptNumber) => {
+            console.log(`Reconnected after ${attemptNumber} attempts`);
+            uiManager.updateConnectionStatus('Reconnected to server', 'connected');
+        });
+
+        state.socket.on('reconnect_error', (error) => {
+            console.error('Reconnection error:', error);
+            uiManager.updateConnectionStatus('Reconnection failed', 'disconnected');
+        });
+
+        state.socket.on('reconnect_failed', () => {
+            console.error('Failed to reconnect to server');
+            uiManager.updateConnectionStatus('Failed to reconnect', 'disconnected');
+            uiManager.showError('Lost connection to server. Please refresh the page.');
+        });
     }
 
     // Send video actions to server
@@ -151,6 +191,8 @@ export class SocketManager {
             return;
         }
         state.lastSyncTime = now;
+
+        console.log(`Broadcasting video action: ${action} at ${time}s (rate: ${playbackRate})`);
 
         state.socket.emit('video-action', {
             action: action,
@@ -184,6 +226,73 @@ export class SocketManager {
         state.socket.emit('media-action', {
             action: action,
             mediaData: mediaData
+        });
+    }
+
+    // Enhanced connection status monitoring
+    monitorConnection() {
+        if (!state.socket) return;
+
+        // Check connection status every 30 seconds
+        setInterval(() => {
+            if (state.socket.connected && state.isConnected) {
+                // Connection is healthy
+                console.log('Connection health check: OK');
+            } else if (!state.socket.connected && state.isConnected) {
+                // Connection lost but state not updated
+                console.warn('Connection health check: LOST');
+                state.isConnected = false;
+                uiManager.updateConnectionStatus('Connection lost', 'disconnected');
+            }
+        }, 30000);
+    }
+
+    // Gracefully disconnect
+    disconnect() {
+        if (state.socket) {
+            console.log('Gracefully disconnecting from server');
+            state.socket.disconnect();
+            state.socket = null;
+            state.isConnected = false;
+        }
+    }
+
+    // Force reconnection
+    reconnect() {
+        if (state.socket) {
+            console.log('Forcing reconnection to server');
+            state.socket.connect();
+        }
+    }
+
+    // Get connection statistics
+    getConnectionStats() {
+        if (!state.socket) return null;
+
+        return {
+            connected: state.socket.connected,
+            id: state.socket.id,
+            transport: state.socket.io.engine.transport.name,
+            upgraded: state.socket.io.engine.upgraded,
+            pingInterval: state.socket.io.engine.pingInterval,
+            pingTimeout: state.socket.io.engine.pingTimeout
+        };
+    }
+
+    // Send custom event with error handling
+    emitWithCallback(eventName, data, callback) {
+        if (!state.socket || !state.isConnected) {
+            if (callback) callback(new Error('Not connected to server'));
+            return;
+        }
+
+        const timeout = setTimeout(() => {
+            if (callback) callback(new Error('Request timeout'));
+        }, 10000); // 10 second timeout
+
+        state.socket.emit(eventName, data, (response) => {
+            clearTimeout(timeout);
+            if (callback) callback(null, response);
         });
     }
 }

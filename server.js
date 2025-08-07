@@ -272,6 +272,69 @@ const users = new Map();
 const ROOM_INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const ROOM_CLEANUP_INTERVAL = 60 * 1000; // Check every minute
 
+// Helper function to promote next admin in room
+function promoteNextAdmin(room, currentAdminSocketId) {
+    const potentialAdmins = Array.from(room.users.values())
+        .filter(user => user.id !== currentAdminSocketId)
+        .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+
+    if (potentialAdmins.length > 0) {
+        const newAdmin = potentialAdmins[0];
+        const oldAdmin = room.users.get(currentAdminSocketId);
+
+        newAdmin.role = 'admin';
+        room.adminId = newAdmin.id;
+        users.set(newAdmin.id, newAdmin);
+
+        console.log(`${newAdmin.name} promoted to admin in room ${room.id}`);
+
+        // Simple notification
+        io.to(newAdmin.id).emit('admin-transferred', {
+            newAdminName: newAdmin.name,
+            formerAdminName: oldAdmin ? oldAdmin.name : 'Former Admin',
+            isYouNewAdmin: true,
+            reason: 'admin-left'
+        });
+
+        // Notify others
+        io.to(room.id).emit('admin-transferred', {
+            newAdminName: newAdmin.name,
+            formerAdminName: oldAdmin ? oldAdmin.name : 'Former Admin',
+            isYouNewAdmin: false,
+            reason: 'admin-left'
+        });
+
+        io.to(room.id).emit('users-update', {
+            users: Array.from(room.users.values()),
+            userCount: room.users.size
+        });
+
+        return newAdmin;
+    }
+
+    room.adminId = null;
+    return null;
+}
+
+function generateUniqueName(baseName, existingUsers, excludeSocketId) {
+    const existingNames = Array.from(existingUsers.values())
+        .filter(u => u.id !== excludeSocketId)
+        .map(u => u.name);
+
+    if (!existingNames.includes(baseName)) {
+        return baseName;
+    }
+
+    let counter = 1;
+    let newName;
+    do {
+        newName = `${baseName} (${counter})`;
+        counter++;
+    } while (existingNames.includes(newName));
+
+    return newName;
+}
+
 // File upload endpoint
 app.post('/upload', (req, res) => {
     req.setTimeout(60 * 60 * 1000);
@@ -298,7 +361,7 @@ app.post('/upload', (req, res) => {
             filename: req.file.filename,
             originalName: req.file.originalname,
             size: req.file.size,
-            url: `/rooms/${roomId}/videos/${req.file.filename}`,  // <-- FIXED
+            url: `/rooms/${roomId}/videos/${req.file.filename}`,
             roomId: roomId
         };
 
@@ -589,24 +652,16 @@ io.on('connection', (socket) => {
 
             socket.join(roomId);
 
-            // Create fresh user object
+            // Create fresh user object with join timestamp for admin succession
+            const uniqueName = generateUniqueName(userName, room.users, socket.id);
             const user = {
                 id: socket.id,
-                name: userName,
+                name: uniqueName,
                 role: userRole,
                 room: roomId,
                 joinedAt: new Date()
             };
 
-            // Check for name conflicts with OTHER users (not including this socket)
-            const existingUserWithSameName = Array.from(room.users.values())
-                .find(u => u.name === userName && u.id !== socket.id);
-
-            if (existingUserWithSameName) {
-                const modifiedName = `${userName}_${Math.floor(Math.random() * 1000)}`;
-                console.log(`Name conflict: ${userName} changed to ${modifiedName}`);
-                user.name = modifiedName;
-            }
 
             // Add user to maps
             users.set(socket.id, user);
@@ -618,7 +673,7 @@ io.on('connection', (socket) => {
                 room.adminId = socket.id;
             }
 
-            console.log(`${user.name} (${userRole}) joined room: ${roomId} [Socket: ${socket.id}]`);
+            console.log(`${user.name} (${userRole}) joined room: ${roomId} [Socket: ${socket.id}] at ${user.joinedAt}`);
 
             // Send room state to new user
             socket.emit('room-state', {
@@ -854,32 +909,37 @@ io.on('connection', (socket) => {
             if (user) {
                 const room = rooms.get(user.room);
                 if (room) {
+                    const wasAdmin = room.adminId === socket.id;
+
                     // Remove user from room
                     room.users.delete(socket.id);
+                    room.lastActivity = Date.now();
 
-                    // Handle admin transfer if needed
-                    if (room.adminId === socket.id) {
-                        const adminUsers = Array.from(room.users.values()).filter(u => u.role === 'admin');
-                        room.adminId = adminUsers.length > 0 ? adminUsers[0].id : null;
+                    // Handle admin promotion if needed
+                    if (wasAdmin && room.users.size > 0) {
+                        console.log(`Admin ${user.name} left. Promoting next admin...`);
+                        promoteNextAdmin(room, socket.id);
+                    } else if (wasAdmin) {
+                        room.adminId = null;
                     }
 
                     // Notify remaining users
                     socket.to(user.room).emit('user-left', {
                         user: user,
-                        userCount: room.users.size,
-                        newAdminId: room.adminId
-                    });
-
-                    // Send updated users list
-                    socket.to(user.room).emit('users-update', {
-                        users: Array.from(room.users.values()),
                         userCount: room.users.size
                     });
 
-                    console.log(`${user.name} disconnected from room ${user.room}`);
+                    // Update users list
+                    if (room.users.size > 0) {
+                        socket.to(user.room).emit('users-update', {
+                            users: Array.from(room.users.values()),
+                            userCount: room.users.size
+                        });
+                    }
+
+                    console.log(`${user.name} left room ${user.room}. Admin: ${room.adminId}`);
                 }
 
-                // Remove from global users map
                 users.delete(socket.id);
             }
         } catch (error) {
@@ -930,14 +990,16 @@ io.on('connection', (socket) => {
                 newAdminName: targetUser.name,
                 formerAdminName: user.name,
                 isYouFormerAdmin: true,
-                isYouNewAdmin: false
+                isYouNewAdmin: false,
+                reason: 'manual-transfer'
             });
 
             io.to(targetUser.id).emit('admin-transferred', {
                 newAdminName: targetUser.name,
                 formerAdminName: user.name,
                 isYouFormerAdmin: false,
-                isYouNewAdmin: true
+                isYouNewAdmin: true,
+                reason: 'manual-transfer'
             });
 
             // Notify other users in the room (excluding the two involved)
@@ -945,7 +1007,8 @@ io.on('connection', (socket) => {
                 newAdminName: targetUser.name,
                 formerAdminName: user.name,
                 isYouFormerAdmin: false,
-                isYouNewAdmin: false
+                isYouNewAdmin: false,
+                reason: 'manual-transfer'
             });
 
             // Update users list for all clients
@@ -1201,7 +1264,8 @@ app.get('/api/stats', (req, res) => {
             adminPresent: !!room.adminId,
             hasTorrent: !!room.currentTorrent,
             createdAt: room.createdAt,
-            lastActivity: room.lastActivity
+            lastActivity: room.lastActivity,
+            currentAdmin: room.adminId ? room.users.get(room.adminId)?.name : null
         }));
 
         res.json({
@@ -1255,7 +1319,6 @@ server.listen(PORT, () => {
     console.log(`📡 WebSocket server ready for connections`);
     console.log(`🌐 Access at: http://localhost:${PORT}`);
     console.log(`🧲 WebTorrent support enabled`);
-    console.log(`🚪 Room-based system active`);
 });
 
 // Graceful shutdown
