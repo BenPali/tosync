@@ -6,13 +6,15 @@ Website: https://tosync.org
 ## Features
 
 - **Real-time synchronization** - Play, pause, and seek actions are synced across all connected users
+- **Room-based sessions** - Create or join rooms with unique 6-character codes
 - **File uploads** - Upload video files up to 10GB directly to the server
 - **Torrent streaming** - Stream videos directly from magnet links (server-side)
 - **Subtitle support** - Upload and sync subtitles in SRT, VTT, ASS, SSA, and SUB formats
-- **Role-based access** - Admin controls for content management, guest access for viewing
 - **File library** - Browse and play previously uploaded or downloaded content
 
 ## Quick Start
+
+Use https://tosync.org or follow these steps for local use:
 
 1. **Install dependencies**
    ```bash
@@ -31,24 +33,22 @@ Website: https://tosync.org
 
 ## Usage
 
-1. **Choose your role** - Select Admin (with password) or Guest access
-2. **Upload a video** - Admins can upload files or use magnet links
-3. **Share the link** - Friends join using the same URL
+1. **Create or join a room** - Create a new room as admin or join an existing one with a room code
+2. **Upload content** - Admins can upload files or use magnet links
+3. **Share the room** - Friends join using the 6-character room code or URL
 4. **Watch together** - All playback actions are automatically synchronized
 
-## Admin Password
+## Room Management
 
-The default admin password is `admin123`. Change this in `script.js`:
-
-```javascript
-const ADMIN_PASSWORD = "your-new-password";
-```
+Tosync now uses a **room-based system**:
+- **Create rooms** - Anyone can create a new room and become the admin automatically
+- **Join rooms** - Enter a 6-character room code or paste the room URL to join
+- **No passwords needed** - Room creators are automatically made admins
+- **Admin succession** - If an admin leaves, the next user is automatically promoted
 
 ## TODO
-- Recycle content more efficiently
 - Fetch subtitles automatically from an API source rather than uploading them manually
-- Create "rooms" in order to have multiple broadcastings simultaneously
-- Rethink the admin system
+- Fix minor issues related to video player
 
 ## Legal Notice
 
