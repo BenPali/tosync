@@ -105,27 +105,64 @@ export class RoomManager {
     }
 
     showGuestNameForm() {
+        // First, validate if room exists by attempting to connect
         document.getElementById('roomSelector').classList.add('hidden');
 
-        const guestFormHtml = `
-            <div class="section" id="guestJoinForm" style="max-width: 500px; margin: 40px auto;">
-                <h3>Join Room ${state.currentRoomId}</h3>
-                <p style="color: #718096; margin-bottom: 24px;">Enter your name to join the room</p>
-
-                <div class="form-group">
-                    <label for="guestNameJoin">Your Name:</label>
-                    <input type="text" id="guestNameJoin" placeholder="Enter your name or leave blank for Anonymous">
-                </div>
-
-                <button class="btn" id="joinAsGuestBtn">Join Room</button>
-                <button class="btn secondary" id="backToRoomSelectFromGuestBtn">Cancel</button>
-
-                <div id="guestJoinError" class="alert error hidden" style="margin-top: 12px;">Room not found. Please check the code and try again.</div>
+        // Show a temporary connecting state
+        const connectingHtml = `
+        <div class="section" id="roomValidation" style="max-width: 500px; margin: 40px auto; text-align: center;">
+            <h3>Validating Room ${state.currentRoomId}</h3>
+            <p style="color: #718096; margin-bottom: 24px;">Checking if room exists...</p>
+            <div style="padding: 20px;">
+                <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top: 3px solid #4299e1; border-radius: 50%; animation: spin 1s linear infinite;"></div>
             </div>
-        `;
+        </div>
+        <style>
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+    `;
 
-        const existingForm = document.getElementById('guestJoinForm');
-        if (existingForm) existingForm.remove();
+        const roomSelector = document.getElementById('roomSelector');
+        roomSelector.insertAdjacentHTML('afterend', connectingHtml);
+
+        // Try to connect as guest to validate room
+        const tempSocket = io();
+        tempSocket.emit('validate-room', { roomId: state.currentRoomId });
+
+        tempSocket.on('room-exists', () => {
+            tempSocket.disconnect();
+            document.getElementById('roomValidation').remove();
+            this.showActualGuestForm();
+        });
+
+        tempSocket.on('room-not-found', () => {
+            tempSocket.disconnect();
+            document.getElementById('roomValidation').remove();
+            document.getElementById('roomNotFound').classList.remove('hidden');
+            document.getElementById('invalidRoomCode').textContent = state.currentRoomId;
+
+            document.getElementById('goBackHomeBtn').addEventListener('click', () => {
+                window.history.pushState({}, '', '/');
+                location.reload();
+            });
+        });
+    }
+
+    showActualGuestForm() {
+        const guestFormHtml = `
+        <div class="section" id="guestJoinForm" style="max-width: 500px; margin: 40px auto;">
+            <h3>Join Room ${state.currentRoomId}</h3>
+            <p style="color: #718096; margin-bottom: 24px;">Enter your name to join the room</p>
+
+            <div class="form-group">
+                <label for="guestNameJoin">Your Name:</label>
+                <input type="text" id="guestNameJoin" placeholder="Enter your name or leave blank for Anonymous">
+            </div>
+
+            <button class="btn" id="joinAsGuestBtn">Join Room</button>
+            <button class="btn secondary" id="backToRoomSelectFromGuestBtn">Cancel</button>
+        </div>
+    `;
 
         const roomSelector = document.getElementById('roomSelector');
         roomSelector.insertAdjacentHTML('afterend', guestFormHtml);

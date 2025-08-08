@@ -29,17 +29,44 @@ export class SocketManager {
 
         state.socket.on('room-not-found', () => {
             console.log('Room not found');
-            const guestJoinError = document.getElementById('guestJoinError');
-            if (guestJoinError) {
-                guestJoinError.classList.remove('hidden');
+
+            // Check if we came from a direct URL
+            const pathParts = window.location.pathname.split('/');
+            const roomCode = pathParts[1];
+
+            if (roomCode && roomCode.length === 6) {
+                // Direct URL access - show room not found page
+                document.getElementById('roomSelector').classList.add('hidden');
+                document.getElementById('guestJoinForm')?.remove();
+                document.getElementById('roomNotFound').classList.remove('hidden');
+                document.getElementById('invalidRoomCode').textContent = roomCode.toUpperCase();
+
+                // Set up go back button
+                document.getElementById('goBackHomeBtn').addEventListener('click', () => {
+                    window.history.pushState({}, '', '/');
+                    location.reload();
+                });
+            } else {
+                // Form submission - show inline error
+                const guestJoinError = document.getElementById('guestJoinError');
+                if (guestJoinError) {
+                    guestJoinError.classList.remove('hidden');
+                }
             }
-            // Don't reset role since user hasn't set one yet
         });
 
         state.socket.on('room-state', (data) => {
             console.log('Received room state:', data);
             uiManager.updateRoomStatus(`Connected to room ${state.currentRoomId}`);
             uiManager.updateUsersList(data.users);
+
+            // Check if our role was changed by the server (auto-promotion)
+            const ourUser = data.users.find(user => user.id === state.socket.id);
+            if (ourUser && ourUser.role !== state.userRole) {
+                console.log(`Role updated by server: ${state.userRole} -> ${ourUser.role}`);
+                state.userRole = ourUser.role;
+                authManager.updateUIForRole(ourUser.role, state.userName);
+            }
 
             // Update current room code display
             document.getElementById('currentRoomCode').textContent = state.currentRoomId;

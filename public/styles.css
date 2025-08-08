@@ -1,3 +1,4 @@
+/* ===== RESET & BASE STYLES ===== */
 * {
     margin: 0;
     padding: 0;
@@ -14,6 +15,7 @@ body {
     flex-direction: column;
 }
 
+/* ===== LAYOUT ===== */
 .container {
     max-width: 1000px;
     margin: 0 auto;
@@ -56,6 +58,101 @@ body {
     color: #2d3748;
 }
 
+.hidden {
+    display: none;
+}
+
+.divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 20px 0;
+}
+
+/* ===== ROOM FUNCTIONALITY ===== */
+.room-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+    margin-top: 24px;
+}
+
+.room-option-card {
+    background: #f7fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.room-option-card:hover {
+    border-color: #cbd5e0;
+    background: #edf2f7;
+}
+
+.room-option-card h4 {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    color: #2d3748;
+}
+
+.room-option-card p {
+    color: #718096;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+.room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 12px;
+    background: #f7fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.room-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.room-user-info .role-indicator {
+    margin-bottom: 0;
+}
+
+.room-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #4a5568;
+    font-weight: 500;
+}
+
+.room-badge span {
+    background: #2d3748;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-family: monospace;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.room-badge span:hover {
+    background: #4a5568;
+}
+
+.room-not-found {
+    max-width: 500px;
+    margin: 40px auto;
+}
+
+/* ===== ROLE SELECTOR ===== */
 .role-selector {
     text-align: center;
 }
@@ -105,22 +202,28 @@ body {
     border-color: #63b3ed;
 }
 
-.admin-auth {
-    margin-top: 20px;
-    padding: 20px;
+.role-indicator {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 20px;
+}
+
+.role-indicator.admin {
     background: #fed7d7;
-    border-radius: 6px;
-    border-left: 4px solid #fc8181;
+    color: #c53030;
 }
 
-.guest-name-form {
-    margin-top: 20px;
-    padding: 20px;
+.role-indicator.guest {
     background: #ebf8ff;
-    border-radius: 6px;
-    border-left: 4px solid #63b3ed;
+    color: #2b6cb0;
 }
 
+/* ===== FORMS ===== */
 .form-group {
     margin-bottom: 16px;
 }
@@ -149,6 +252,79 @@ body {
     box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
 }
 
+.form-group input[type="text"] {
+    transition: all 0.2s ease;
+}
+
+.form-group input[type="text"]:focus {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1), 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#roomCodeInput {
+    text-align: center;
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+    font-family: monospace;
+    text-transform: uppercase;
+}
+
+#adminNameInput {
+    font-size: 1.1rem;
+    font-weight: 500;
+    padding: 12px 16px;
+    text-align: center;
+}
+
+#adminNameInput::placeholder {
+    color: #a0aec0;
+    font-weight: normal;
+}
+
+/* Form containers */
+.admin-auth {
+    margin-top: 20px;
+    padding: 20px;
+    background: #fed7d7;
+    border-radius: 6px;
+    border-left: 4px solid #fc8181;
+}
+
+.guest-name-form {
+    margin-top: 20px;
+    padding: 20px;
+    background: #ebf8ff;
+    border-radius: 6px;
+    border-left: 4px solid #63b3ed;
+}
+
+#adminTransferSection {
+    border-left: 4px solid #fc8181;
+    background: #fed7d7;
+}
+
+#adminNameForm {
+    border-left: 4px solid #4299e1;
+    background: #ebf8ff;
+}
+
+#adminNameForm .alert.success {
+    background: #bee3f8;
+    border: 1px solid #63b3ed;
+    color: #2b6cb0;
+}
+
+#adminNameForm h3 {
+    color: #2b6cb0;
+    margin-bottom: 8px;
+}
+
+#adminNameForm .form-group label {
+    color: #2b6cb0;
+    font-weight: 600;
+}
+
+/* ===== BUTTONS ===== */
 .btn {
     background: #4299e1;
     color: white;
@@ -189,27 +365,12 @@ body {
     background: #c53030;
 }
 
-.role-indicator {
-    display: inline-block;
+.btn.small {
     padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 20px;
+    font-size: 0.85rem;
 }
 
-.role-indicator.admin {
-    background: #fed7d7;
-    color: #c53030;
-}
-
-.role-indicator.guest {
-    background: #ebf8ff;
-    color: #2b6cb0;
-}
-
+/* ===== CONNECTION STATUS ===== */
 .connection-status {
     text-align: center;
     padding: 12px;
@@ -228,6 +389,34 @@ body {
     color: #c53030;
 }
 
+/* ===== ADMIN CONTROLS ===== */
+details > summary {
+    list-style: none;
+    outline: none;
+    user-select: none;
+}
+
+details > summary::-webkit-details-marker {
+    display: none;
+}
+
+details > summary::before {
+    content: '▶';
+    font-size: 0.8em;
+    margin-right: 8px;
+    transition: transform 0.2s ease;
+    display: inline-block;
+}
+
+details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+details > summary:hover {
+    color: #4299e1 !important;
+}
+
+/* ===== VIDEO PLAYER ===== */
 .video-container {
     background: #000;
     border-radius: 8px;
@@ -250,170 +439,7 @@ video {
     margin-top: 16px;
 }
 
-.status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.status-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 16px;
-}
-
-.status-card h4 {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #718096;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-}
-
-.status-card p {
-    font-size: 0.95rem;
-    color: #2d3748;
-}
-
-.progress-bar {
-    width: 100%;
-    height: 4px;
-    background: #e2e8f0;
-    border-radius: 2px;
-    overflow: hidden;
-    margin: 8px 0;
-}
-
-.progress-fill {
-    height: 100%;
-    background: #4299e1;
-    border-radius: 2px;
-    transition: width 0.3s ease;
-}
-
-.file-list {
-    margin-top: 16px;
-}
-
-.file-item {
-    padding: 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.file-item:hover {
-    background: #f7fafc;
-    border-color: #cbd5e0;
-}
-
-.file-item.restricted {
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-.file-item.restricted:hover {
-    background: white;
-    border-color: #e2e8f0;
-}
-
-.users-list {
-    margin-top: 12px;
-}
-
-.user-item {
-    display: inline-block;
-    background: #f7fafc;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    margin-right: 8px;
-    margin-bottom: 4px;
-}
-
-.user-item.admin {
-    background: #fed7d7;
-    color: #c53030;
-}
-
-.hidden {
-    display: none;
-}
-
-.alert {
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-}
-
-.alert.warning {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    color: #856404;
-}
-
-.alert.success {
-    background: #c6f6d5;
-    color: #22543d;
-}
-
-.alert.error {
-    background: #fed7d7;
-    color: #c53030;
-}
-
-.divider {
-    height: 1px;
-    background: #e2e8f0;
-    margin: 20px 0;
-}
-
-/* Subtitle styles */
-.subtitles-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 12px;
-}
-
-.subtitle-option {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 0.9rem;
-}
-
-.subtitle-option:hover {
-    background: #edf2f7;
-    border-color: #cbd5e0;
-}
-
-.subtitle-option.selected {
-    background: #ebf8ff;
-    border-color: #63b3ed;
-    color: #2d3748;
-}
-
-.subtitle-option.selected:hover {
-    background: #bee3f8;
-}
-
-/* Custom Video Player Styles */
+/* Custom Video Player */
 .custom-video-player {
     position: relative;
     background: #000;
@@ -444,7 +470,6 @@ video {
     opacity: 1;
 }
 
-/* Fullscreen controls */
 .custom-video-player:fullscreen .video-controls,
 .custom-video-player:-webkit-full-screen .video-controls,
 .custom-video-player:-moz-full-screen .video-controls {
@@ -465,11 +490,13 @@ video {
 
 .progress-bar {
     position: relative;
+    width: 100%;
     height: 4px;
     background: rgba(255, 255, 255, 0.3);
     border-radius: 2px;
     cursor: pointer;
-    margin-bottom: 8px;
+    margin: 8px 0;
+    overflow: hidden;
 }
 
 .progress-fill {
@@ -477,7 +504,7 @@ video {
     background: #3b82f6;
     border-radius: 2px;
     width: 0%;
-    transition: width 0.1s ease;
+    transition: width 0.3s ease;
 }
 
 .progress-handle {
@@ -506,7 +533,7 @@ video {
     font-weight: 500;
 }
 
-/* Main Controls */
+/* Control Buttons */
 .controls-main {
     display: flex;
     justify-content: space-between;
@@ -527,7 +554,6 @@ video {
     justify-content: center;
 }
 
-/* Control Buttons */
 .control-btn {
     background: rgba(255, 255, 255, 0.1);
     border: none;
@@ -556,6 +582,18 @@ video {
 
 .control-btn.admin:hover {
     background: rgba(59, 130, 246, 0.3);
+}
+
+.controls-admin {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.admin-controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
 }
 
 /* Volume Control */
@@ -597,7 +635,71 @@ video {
     border: none;
 }
 
-/* Subtitle Control */
+/* ===== STATUS GRID ===== */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.status-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.status-card h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.status-card p {
+    font-size: 0.95rem;
+    color: #2d3748;
+}
+
+/* ===== SUBTITLES ===== */
+.subtitles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.subtitle-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.subtitle-option:hover {
+    background: #edf2f7;
+    border-color: #cbd5e0;
+}
+
+.subtitle-option.selected {
+    background: #ebf8ff;
+    border-color: #63b3ed;
+    color: #2d3748;
+}
+
+.subtitle-option.selected:hover {
+    background: #bee3f8;
+}
+
 .subtitle-control {
     position: relative;
 }
@@ -684,20 +786,38 @@ video {
     color: #93c5fd;
 }
 
-/* Admin Controls */
-.controls-admin {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
+/* ===== FILE MANAGEMENT ===== */
+.file-list {
+    margin-top: 16px;
 }
 
-.admin-controls {
+.file-item {
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
     display: flex;
-    justify-content: center;
-    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
 }
 
-/* File library styles */
+.file-item:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+}
+
+.file-item.restricted {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.file-item.restricted:hover {
+    background: white;
+    border-color: #e2e8f0;
+}
+
 .file-library-list {
     background: #1a202c;
     border: 1px solid #2d3748;
@@ -730,7 +850,7 @@ video {
 }
 
 .library-file-item.downloaded {
-    border-left-color: #22c55e;
+    border-left-color: #4299e1;
 }
 
 .library-file-item .file-info {
@@ -782,13 +902,159 @@ video {
     cursor: not-allowed;
 }
 
-/* Footer Styles */
+/* ===== USERS ===== */
+.users-list {
+    margin-top: 12px;
+}
+
+.user-item {
+    display: inline-block;
+    background: #f7fafc;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-right: 8px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.user-item:hover {
+    background: #f0f0f0;
+}
+
+.user-item.admin {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+.user-item.admin:hover {
+    background: #fbb6ce;
+}
+
+.user-item.current-user {
+    font-weight: bold;
+    border: 2px solid #4299e1;
+}
+
+.user-management-menu {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    min-width: 120px;
+}
+
+.user-menu-btn {
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 8px 16px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+}
+
+.user-menu-btn:hover {
+    background: #f7fafc;
+}
+
+.user-menu-btn.make-admin {
+    color: #2b6cb0;
+}
+
+.user-menu-btn.kick-user {
+    color: #e53e3e;
+}
+
+.transfer-users-list {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.transfer-user-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.transfer-user-item:hover {
+    border-color: #cbd5e0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.transfer-user-item:last-child {
+    margin-bottom: 0;
+}
+
+.transfer-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.transfer-user-name {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.transfer-user-role {
+    font-size: 0.8rem;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.transfer-user-item .btn {
+    margin: 0;
+    font-size: 0.85rem;
+    padding: 6px 12px;
+}
+
+/* ===== ALERTS ===== */
+.alert {
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+}
+
+.alert.warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+}
+
+.alert.success {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.alert.error {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+/* ===== FOOTER ===== */
 .footer {
-    background: #1a202c;
-    color: #e2e8f0;
+    background: #f8f9fa;
+    color: #4a5568;
     margin-top: 40px;
     padding: 40px 0 20px 0;
-    border-top: 1px solid #2d3748;
+    border-top: 1px solid #e2e8f0;
 }
 
 .footer-content {
@@ -801,14 +1067,14 @@ video {
 }
 
 .footer-section h4 {
-    color: #4299e1;
+    color: #2d3748;
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 12px;
 }
 
 .footer-section p {
-    color: #a0aec0;
+    color: #718096;
     font-size: 0.9rem;
     line-height: 1.5;
 }
@@ -820,7 +1086,7 @@ video {
 }
 
 .footer-links a {
-    color: #a0aec0;
+    color: #718096;
     text-decoration: none;
     font-size: 0.9rem;
     transition: color 0.2s ease;
@@ -839,7 +1105,7 @@ video {
 }
 
 .footer-bottom {
-    border-top: 1px solid #2d3748;
+    border-top: 1px solid #e2e8f0;
     margin-top: 30px;
     padding-top: 20px;
     text-align: center;
@@ -855,7 +1121,7 @@ video {
     font-size: 0.85rem;
 }
 
-/* Responsive Design */
+/* ===== RESPONSIVE DESIGN ===== */
 @media (max-width: 768px) {
     .container {
         padding: 16px;
@@ -910,137 +1176,32 @@ video {
         padding: 30px 0 15px 0;
     }
 
-    /* Transfer Admin Styles */
-    .transfer-users-list {
-        background: #f7fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 12px;
-        max-height: 200px;
-        overflow-y: auto;
-    }
-
-    .transfer-user-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px;
-        margin-bottom: 8px;
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-    }
-
-    .transfer-user-item:hover {
-        border-color: #cbd5e0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-
-    .transfer-user-item:last-child {
-        margin-bottom: 0;
-    }
-
-    .transfer-user-info {
-        display: flex;
+    .room-header {
         flex-direction: column;
-        gap: 4px;
-    }
-
-    .transfer-user-name {
-        font-weight: 500;
-        color: #2d3748;
-    }
-
-    .transfer-user-role {
-        font-size: 0.8rem;
-        color: #718096;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .transfer-user-item .btn {
-        margin: 0;
-        font-size: 0.85rem;
-        padding: 6px 12px;
-    }
-
-    #adminTransferSection {
-        border-left: 4px solid #fc8181;
-        background: #fed7d7;
-    }
-
-    /* Admin Name Form Styles */
-    #adminNameForm {
-        border-left: 4px solid #48bb78;
-        background: #c6f6d5;
-    }
-
-    #adminNameForm .alert.success {
-        background: #9ae6b4;
-        border: 1px solid #68d391;
-        color: #22543d;
-    }
-
-    #adminNameInput {
-        font-size: 1.1rem;
-        font-weight: 500;
-        padding: 12px 16px;
+        gap: 12px;
         text-align: center;
     }
 
-    #adminNameInput::placeholder {
-        color: #a0aec0;
-        font-weight: normal;
+    .room-user-info {
+        flex-direction: column;
+        gap: 8px;
     }
 
-    /* Enhanced form interactions */
-    .form-group input[type="text"] {
-        transition: all 0.2s ease;
+    #adminNameForm,
+    #guestJoinForm {
+        margin: 20px auto;
+        padding: 20px;
     }
 
-    .form-group input[type="text"]:focus {
-        transform: scale(1.02);
-        box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1), 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    /* Better button alignment for forms */
     #adminNameForm .btn,
     #guestJoinForm .btn {
-        margin-right: 12px;
+        width: 100%;
+        margin-right: 0;
         margin-bottom: 8px;
     }
 
     #adminNameForm .btn:last-of-type,
     #guestJoinForm .btn:last-of-type {
         margin-right: 0;
-    }
-
-    /* Form container improvements */
-    #adminNameForm h3 {
-        color: #22543d;
-        margin-bottom: 8px;
-    }
-
-    #adminNameForm .form-group label {
-        color: #2f855a;
-        font-weight: 600;
-    }
-
-    /* Responsive adjustments for forms */
-    @media (max-width: 768px) {
-
-        #adminNameForm,
-        #guestJoinForm {
-            margin: 20px auto;
-            padding: 20px;
-        }
-
-        #adminNameForm .btn,
-        #guestJoinForm .btn {
-            width: 100%;
-            margin-right: 0;
-            margin-bottom: 8px;
-        }
     }
 }

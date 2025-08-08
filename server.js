@@ -599,7 +599,7 @@ io.on('connection', (socket) => {
 
             // Create room if it doesn't exist
             if (!rooms.has(roomId)) {
-                if (isCreator || userRole === 'admin') {
+                if (isCreator && userRole === 'admin') {
                     rooms.set(roomId, {
                         id: roomId,
                         users: new Map(),
@@ -654,10 +654,18 @@ io.on('connection', (socket) => {
 
             // Create fresh user object with join timestamp for admin succession
             const uniqueName = generateUniqueName(userName, room.users, socket.id);
+            let finalRole = userRole;
+
+            // Check if room exists but is empty and has no admin - promote to admin
+            if (!room.adminId && room.users.size === 0 && userRole === 'guest') {
+                console.log(`Auto-promoting ${uniqueName} to admin in empty room ${roomId}`);
+                finalRole = 'admin';
+            }
+
             const user = {
                 id: socket.id,
                 name: uniqueName,
-                role: userRole,
+                role: finalRole,
                 room: roomId,
                 joinedAt: new Date()
             };
@@ -669,11 +677,11 @@ io.on('connection', (socket) => {
             room.lastActivity = Date.now();
 
             // Set admin if appropriate
-            if (userRole === 'admin' && (!room.adminId || isCreator)) {
+            if (finalRole === 'admin' && (!room.adminId || isCreator)) {
                 room.adminId = socket.id;
             }
 
-            console.log(`${user.name} (${userRole}) joined room: ${roomId} [Socket: ${socket.id}] at ${user.joinedAt}`);
+            console.log(`${user.name} (${finalRole}) joined room: ${roomId} [Socket: ${socket.id}] at ${user.joinedAt}`);
 
             // Send room state to new user
             socket.emit('room-state', {
@@ -1097,6 +1105,15 @@ io.on('connection', (socket) => {
         } catch (error) {
             console.error('Error in kick-user:', error);
             socket.emit('kick-user-error', { message: 'Failed to kick user' });
+        }
+    });
+
+    socket.on('validate-room', (data) => {
+        const { roomId } = data;
+        if (rooms.has(roomId)) {
+            socket.emit('room-exists');
+        } else {
+            socket.emit('room-not-found');
         }
     });
 });
