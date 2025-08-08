@@ -49,6 +49,8 @@ Tosync now uses a **room-based system**:
 ## TODO
 - Fetch subtitles automatically from an API source rather than uploading them manually
 - Fix minor issues related to video player
+- Vulnerability analysis and patching for uploads and torrents
+- Sanitize text inputs
 
 ## Legal Notice
 
