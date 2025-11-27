@@ -217,7 +217,9 @@ export class RoomManager {
         state.currentRoomId = null;
         state.isRoomCreator = false;
         state.currentTorrentInfo = null;
-        torrentManager.clearTorrentProgress();
+        if (torrentManager) {
+            torrentManager.clearTorrentProgress();
+        }
         state.lastMediaAction = null;
         state.availableSubtitles = [];
         state.selectedSubtitleId = null;

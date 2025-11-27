@@ -115,7 +115,12 @@ export class FileLibraryManager {
 
         // Clear torrent info since we're playing a file
         state.currentTorrentInfo = null;
-        torrentManager.clearTorrentProgress();
-        document.getElementById('torrentInfo').classList.add('hidden');
+        if (torrentManager) {
+            torrentManager.clearTorrentProgress();
+            const torrentInfo = document.getElementById('torrentInfo');
+            if (torrentInfo) {
+                torrentInfo.classList.add('hidden');
+            }
+        }
     }
 }

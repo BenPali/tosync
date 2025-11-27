@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Tosync</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container" style="max-width: 500px; margin-top: 10vh;">
+        <div class="header" style="text-align: center;">
+            <h1>Tosync</h1>
+            <p>Admin Login</p>
+        </div>
+
+        <div class="section">
+            <form id="loginForm" style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required autocomplete="username"
+                           style="padding: 12px; font-size: 1rem;">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password"
+                           style="padding: 12px; font-size: 1rem;">
+                </div>
+
+                <div id="errorMessage" class="alert error hidden" style="margin: 0;"></div>
+
+                <button type="submit" class="btn" id="loginBtn" style="padding: 14px; font-size: 1.1rem;">
+                    Login
+                </button>
+            </form>
+        </div>
+
+        <div class="divider" style="margin: 32px 0;"></div>
+
+        <div class="section">
+            <h3 style="text-align: center; margin-bottom: 16px;">Join Room as Guest</h3>
+            <p style="text-align: center; color: #718096; margin-bottom: 16px;">
+                Have a room code? Join without logging in
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="form-group">
+                    <input type="text" id="guestRoomCode" placeholder="Enter 32-character room code" maxlength="32"
+                           style="text-transform: uppercase; font-family: monospace; font-size: 0.9rem; padding: 12px;">
+                </div>
+                <button class="btn secondary" id="guestJoinBtn" style="padding: 12px;">
+                    Join Room as Guest
+                </button>
+                <div id="guestError" class="alert error hidden" style="margin: 0;"></div>
+            </div>
+        </div>
+
+        <footer class="footer" style="margin-top: 40px;">
+            <div class="footer-bottom">
+                <p>2025 Tosync</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const loginBtn = document.getElementById('loginBtn');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            errorMessage.classList.add('hidden');
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Authenticating...';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Get redirect URL from query params or default to home
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const redirect = urlParams.get('redirect') || '/';
+                    window.location.href = redirect;
+                } else {
+                    errorMessage.textContent = data.error || 'Invalid credentials';
+                    errorMessage.classList.remove('hidden');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Login';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessage.textContent = 'Connection error. Please try again.';
+                errorMessage.classList.remove('hidden');
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
+        });
+
+        // Guest join functionality
+        const guestRoomCode = document.getElementById('guestRoomCode');
+        const guestJoinBtn = document.getElementById('guestJoinBtn');
+        const guestError = document.getElementById('guestError');
+
+        // Auto-uppercase and format room code
+        guestRoomCode.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Handle paste (extract room code from URL if pasted)
+        guestRoomCode.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            let roomCode = pastedText;
+
+            if (pastedText.includes('://') || pastedText.includes('/')) {
+                const parts = pastedText.split('/');
+                const lastSegment = parts[parts.length - 1];
+                if (lastSegment && lastSegment.length === 32) {
+                    roomCode = lastSegment;
+                } else {
+                    const match = pastedText.match(/[A-Z0-9]{32}/i);
+                    if (match) roomCode = match[0];
+                }
+            }
+
+            e.target.value = roomCode.toUpperCase().slice(0, 32);
+        });
+
+        // Join room on Enter key
+        guestRoomCode.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                guestJoinBtn.click();
+            }
+        });
+
+        // Join room button
+        guestJoinBtn.addEventListener('click', () => {
+            const roomCode = guestRoomCode.value.trim().toUpperCase();
+
+            guestError.classList.add('hidden');
+
+            if (roomCode.length !== 32) {
+                guestError.textContent = 'Please enter a valid 32-character room code';
+                guestError.classList.remove('hidden');
+                return;
+            }
+
+            // Validate format (alphanumeric)
+            if (!/^[A-Z0-9]{32}$/.test(roomCode)) {
+                guestError.textContent = 'Room code must contain only letters and numbers';
+                guestError.classList.remove('hidden');
+                return;
+            }
+
+            // Redirect to room URL
+            window.location.href = `/${roomCode}`;
+        });
+    </script>
+</body>
+</html>

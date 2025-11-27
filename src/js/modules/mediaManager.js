@@ -80,7 +80,10 @@ export class MediaManager {
                     };
 
                     state.videoPlayer.load();
-                    document.getElementById('torrentInfo').classList.add('hidden');
+                    const torrentInfo = document.getElementById('torrentInfo');
+                    if (torrentInfo) {
+                        torrentInfo.classList.add('hidden');
+                    }
 
                 } catch (parseError) {
                     console.error('JSON parse error:', parseError);
@@ -118,9 +121,14 @@ export class MediaManager {
         }
 
         state.currentTorrentInfo = null;
-        torrentManager.clearTorrentProgress();
+        if (torrentManager) {
+            torrentManager.clearTorrentProgress();
+        }
         state.videoPlayer.src = '';
-        document.getElementById('torrentInfo').classList.add('hidden');
+        const torrentInfo = document.getElementById('torrentInfo');
+        if (torrentInfo) {
+            torrentInfo.classList.add('hidden');
+        }
         document.getElementById('progressFill').style.width = '0%';
         state.lastMediaAction = null;
 
@@ -149,8 +157,11 @@ export class MediaManager {
                     document.getElementById('torrentSize').textContent = uiManager.formatBytes(state.currentTorrentInfo.size || 0);
 
                     // Only show torrent info for admins
-                    if (state.userRole === 'admin') {
-                        document.getElementById('torrentInfo').classList.remove('hidden');
+                    if (state.userRole === 'admin' && torrentManager) {
+                        const torrentInfo = document.getElementById('torrentInfo');
+                        if (torrentInfo) {
+                            torrentInfo.classList.remove('hidden');
+                        }
                         torrentManager.updateTorrentProgressFromServer();
                     }
                 }
@@ -158,7 +169,9 @@ export class MediaManager {
 
             case 'load-file':
                 state.currentTorrentInfo = null;
-                torrentManager.clearTorrentProgress();
+                if (torrentManager) {
+                    torrentManager.clearTorrentProgress();
+                }
                 uiManager.updateMediaStatus(`${data.user} loaded: ${data.mediaData.data.fileName}`);
 
                 // Clear previous event listeners
@@ -167,15 +180,23 @@ export class MediaManager {
 
                 state.videoPlayer.src = data.mediaData.data.url;
                 state.videoPlayer.load();
-                document.getElementById('torrentInfo').classList.add('hidden');
+                const torrentInfoLoadFile = document.getElementById('torrentInfo');
+                if (torrentInfoLoadFile) {
+                    torrentInfoLoadFile.classList.add('hidden');
+                }
                 break;
 
             case 'clear-media':
                 state.currentTorrentInfo = null;
-                torrentManager.clearTorrentProgress();
+                if (torrentManager) {
+                    torrentManager.clearTorrentProgress();
+                }
                 state.videoPlayer.src = '';
                 uiManager.updateMediaStatus(`${data.user} cleared media`);
-                document.getElementById('torrentInfo').classList.add('hidden');
+                const torrentInfoClearMedia = document.getElementById('torrentInfo');
+                if (torrentInfoClearMedia) {
+                    torrentInfoClearMedia.classList.add('hidden');
+                }
                 break;
         }
 

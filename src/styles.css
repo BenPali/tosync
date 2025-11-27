@@ -1205,3 +1205,108 @@ video {
         margin-right: 0;
     }
 }
+
+/* ===== LANDING PAGE (FULLSCREEN) ===== */
+.landing-page {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.landing-container {
+    max-width: 900px;
+    width: 90%;
+}
+
+.landing-header {
+    text-align: center;
+    margin-bottom: 48px;
+}
+
+.landing-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 8px;
+}
+
+.landing-header p {
+    font-size: 1.1rem;
+    color: #718096;
+}
+
+.landing-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+}
+
+.landing-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 32px;
+}
+
+.landing-card h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 8px;
+}
+
+.landing-card p {
+    color: #718096;
+    margin-bottom: 24px;
+    font-size: 0.95rem;
+}
+
+.landing-card .form-group {
+    margin-bottom: 16px;
+}
+
+.landing-card input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+}
+
+.landing-card input:focus {
+    outline: none;
+    border-color: #3182ce;
+}
+
+.landing-card .btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .landing-header h1 {
+        font-size: 2rem;
+    }
+
+    .landing-header p {
+        font-size: 1rem;
+    }
+
+    .landing-options {
+        grid-template-columns: 1fr;
+    }
+
+    .landing-card {
+        padding: 24px;
+    }
+}

@@ -1,6 +1,6 @@
 // main.js - Entry point for Tosync application
+// Conditionally loads TorrentManager based on config.ENABLE_TORRENTS
 
-// Import all modules
 import { RoomManager, setupPopStateHandler } from './modules/roomManager.js';
 import { SocketManager } from './modules/socketManager.js';
 import { VideoPlayer } from './modules/videoPlayer.js';
@@ -8,7 +8,6 @@ import { MediaManager } from './modules/mediaManager.js';
 import { AuthManager } from './modules/authManager.js';
 import { UIManager } from './modules/uiManager.js';
 import { SubtitleManager } from './modules/subtitleManager.js';
-import { TorrentManager } from './modules/torrentManager.js';
 import { FileLibraryManager } from './modules/fileLibraryManager.js';
 import { config } from './config.js';
 import { state } from './state.js';
@@ -21,8 +20,10 @@ const mediaManager = new MediaManager();
 const authManager = new AuthManager();
 const uiManager = new UIManager();
 const subtitleManager = new SubtitleManager();
-const torrentManager = new TorrentManager();
 const fileLibraryManager = new FileLibraryManager();
+
+// Torrent manager will be initialized later if needed
+let torrentManager = null;
 
 // Export managers for use in other modules
 export {
@@ -41,18 +42,33 @@ export {
 setupPopStateHandler(roomManager);
 
 // Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     state.videoPlayer = document.getElementById('videoPlayer');
 
     uiManager.initialize();
     uiManager.updateMediaStatus('Select a room to begin');
     subtitleManager.initialize();
+
+    // Initialize torrent manager if enabled
+    if (config.ENABLE_TORRENTS) {
+        try {
+            const { TorrentManager } = await import('./modules/torrentManager.js');
+            torrentManager = new TorrentManager();
+        } catch (error) {
+            console.error('Failed to load TorrentManager:', error);
+        }
+    }
+
     setupUIEventListeners();
+
+    if (config.ENABLE_TORRENTS) {
+        await checkAuthStatus();
+    }
 
     const pathParts = window.location.pathname.split('/');
     const possibleRoomCode = pathParts[1];
 
-    if (possibleRoomCode && possibleRoomCode.length === 6) {
+    if (possibleRoomCode && possibleRoomCode.length === config.ROOM_CODE_LENGTH) {
         state.currentRoomId = possibleRoomCode.toUpperCase();
         state.isRoomCreator = false;
         window.history.replaceState({ roomId: state.currentRoomId, isRoomCreator: false }, '', `/${state.currentRoomId}`);
@@ -60,9 +76,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/api/auth/status', { credentials: 'include' });
+        const data = await response.json();
+
+        if (data.authenticated) {
+            // User is already logged in, show room selector
+            document.getElementById('roomSelector').classList.remove('hidden');
+            document.getElementById('loggedInUsername').textContent = data.username;
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+    }
+}
+
+async function handleLogout() {
+    try {
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        // Redirect to login page
+        window.location.href = '/login';
+    } catch (error) {
+        console.error('Logout failed:', error);
+    }
+}
+
 function setupUIEventListeners() {
-    document.getElementById('createRoomBtn').addEventListener('click', () => roomManager.createRoom());
-    document.getElementById('joinRoomBtn').addEventListener('click', () => roomManager.joinRoom());
+    console.log('[SETUP] Setting up event listeners, ENABLE_TORRENTS:', config.ENABLE_TORRENTS);
+    if (config.ENABLE_TORRENTS) {
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    const adminJoinRoomBtn = document.getElementById('adminJoinRoomBtn');
+
+    if (createRoomBtn) createRoomBtn.addEventListener('click', () => roomManager.createRoom());
+    if (joinRoomBtn) joinRoomBtn.addEventListener('click', () => roomManager.joinRoom());
+    if (adminJoinRoomBtn) adminJoinRoomBtn.addEventListener('click', () => {
+        // Copy admin room code input to main room code input for processing
+        const adminCode = document.getElementById('adminRoomCodeInput').value;
+        document.getElementById('roomCodeInput').value = adminCode;
+        roomManager.joinRoom();
+    });
     document.getElementById('currentRoomCode').addEventListener('click', () => {
         const roomUrl = `${window.location.origin}/${state.currentRoomId}`;
         navigator.clipboard.writeText(roomUrl).then(() => {
@@ -76,7 +137,15 @@ function setupUIEventListeners() {
     document.getElementById('leaveRoomBtn').addEventListener('click', () => roomManager.leaveRoom());
     document.getElementById('uploadBtn').addEventListener('click', () => mediaManager.uploadFile());
     document.getElementById('clearMediaBtn').addEventListener('click', () => mediaManager.clearMedia());
-    document.getElementById('loadTorrentBtn').addEventListener('click', () => torrentManager.loadTorrent());
+
+    // Torrent button - only wire up if element exists AND torrentManager is loaded
+    if (config.ENABLE_TORRENTS && torrentManager) {
+        const loadTorrentBtn = document.getElementById('loadTorrentBtn');
+        if (loadTorrentBtn) {
+            loadTorrentBtn.addEventListener('click', () => torrentManager.loadTorrent());
+        }
+    }
+
     document.getElementById('uploadSubtitleBtn').addEventListener('click', () => subtitleManager.uploadSubtitle());
     document.getElementById('resetRoleBtn').addEventListener('click', () => authManager.resetRole());
     document.getElementById('refreshLibraryBtn').addEventListener('click', () => fileLibraryManager.loadFileLibrary());
@@ -99,9 +168,9 @@ function setupUIEventListeners() {
         if (value.includes('://') || value.includes('/')) {
             const parts = value.split('/');
             const possibleCode = parts[parts.length - 1];
-            if (possibleCode && possibleCode.length === 6) value = possibleCode;
+            if (possibleCode && possibleCode.length === config.ROOM_CODE_LENGTH) value = possibleCode;
         }
-        e.target.value = value.toUpperCase().slice(0, 6);
+        e.target.value = value.toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
     });
 
     document.getElementById('roomCodeInput').addEventListener('paste', (e) => {
@@ -112,15 +181,15 @@ function setupUIEventListeners() {
         if (pastedText.includes('://') || pastedText.includes('/')) {
             const parts = pastedText.split('/');
             const lastSegment = parts[parts.length - 1];
-            if (lastSegment && lastSegment.length === 6) {
+            if (lastSegment && lastSegment.length === config.ROOM_CODE_LENGTH) {
                 roomCode = lastSegment;
             } else {
-                const match = pastedText.match(/[A-Z0-9]{6}/i);
+                const match = pastedText.match(new RegExp(`[A-Z0-9]{${config.ROOM_CODE_LENGTH}}`, 'i'));
                 if (match) roomCode = match[0];
             }
         }
 
-        e.target.value = roomCode.toUpperCase().slice(0, 6);
+        e.target.value = roomCode.toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
     });
 
     document.addEventListener('keydown', (e) => {

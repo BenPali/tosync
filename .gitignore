@@ -1,3 +1,15 @@
 rooms/
 node_modules/
 package-lock.json
+public/
+private/
+.env
+.env.local
+.env.*.local
+tosync*.conf
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

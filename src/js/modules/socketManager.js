@@ -6,7 +6,9 @@ import { videoPlayer, mediaManager, torrentManager, subtitleManager, authManager
 
 export class SocketManager {
     initializeSocket() {
-        state.socket = io();
+        state.socket = io({
+            withCredentials: true
+        });
 
         state.socket.on('connect', () => {
             console.log('Connected to server');
@@ -82,7 +84,7 @@ export class SocketManager {
 
                 if (data.currentMedia.type === 'file') {
                     mediaManager.restoreFileMedia(data.currentMedia, data.videoState);
-                } else if (data.currentMedia.type === 'torrent') {
+                } else if (data.currentMedia.type === 'torrent' && torrentManager) {
                     torrentManager.restoreTorrentMedia(data.currentMedia, data.videoState);
                 }
             }
@@ -97,7 +99,7 @@ export class SocketManager {
         });
 
         state.socket.on('torrent-progress', (data) => {
-            if (state.currentTorrentInfo && data.infoHash === state.currentTorrentInfo.infoHash) {
+            if (torrentManager && state.currentTorrentInfo && data.infoHash === state.currentTorrentInfo.infoHash) {
                 torrentManager.updateTorrentProgressUI(data);
             }
         });
