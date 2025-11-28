@@ -1,170 +1,146 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Tosync</title>
+    <title>Login - ToSync Advanced</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#dc2626',
+                        dark: '#0f172a',
+                        surface: '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-    <div class="container" style="max-width: 500px; margin-top: 10vh;">
-        <div class="header" style="text-align: center;">
-            <h1>Tosync</h1>
-            <p>Admin Login</p>
+<body class="min-h-screen bg-dark text-slate-200 flex items-center justify-center p-4 relative overflow-hidden font-[Inter]">
+
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px]"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-900/20 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="max-w-md w-full bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden fade-in">
+        <div class="bg-surface/50 p-6 text-center border-b border-white/5">
+            <h1 class="text-2xl font-bold text-white tracking-tight">ToSync <span class="text-primary text-sm font-normal">Advanced</span></h1>
+            <p class="text-slate-400 text-sm mt-1">Admin Access</p>
         </div>
 
-        <div class="section">
-            <form id="loginForm" style="display: flex; flex-direction: column; gap: 16px;">
-                <div class="form-group">
-                    <label for="username">Username:</label>
-                    <input type="text" id="username" name="username" required autocomplete="username"
-                           style="padding: 12px; font-size: 1rem;">
+        <div class="p-8 space-y-8">
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Username</label>
+                    <input type="text" id="username" name="username" required autocomplete="username" class="w-full bg-dark/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition" placeholder="Enter username">
                 </div>
-
-                <div class="form-group">
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required autocomplete="current-password"
-                           style="padding: 12px; font-size: 1rem;">
+                <div>
+                    <label for="password" class="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password" class="w-full bg-dark/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition" placeholder="••••••••">
                 </div>
-
-                <div id="errorMessage" class="alert error hidden" style="margin: 0;"></div>
-
-                <button type="submit" class="btn" id="loginBtn" style="padding: 14px; font-size: 1.1rem;">
-                    Login
-                </button>
+                <div id="errorMessage" class="hidden p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center"></div>
+                <button type="submit" id="loginBtn" class="w-full bg-primary hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-red-900/20 transition transform active:scale-[0.98]">Login</button>
             </form>
-        </div>
 
-        <div class="divider" style="margin: 32px 0;"></div>
+            <div class="relative">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                <div class="relative flex justify-center text-xs uppercase"><span class="bg-surface px-2 text-slate-500">Or join as guest</span></div>
+            </div>
 
-        <div class="section">
-            <h3 style="text-align: center; margin-bottom: 16px;">Join Room as Guest</h3>
-            <p style="text-align: center; color: #718096; margin-bottom: 16px;">
-                Have a room code? Join without logging in
-            </p>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-                <div class="form-group">
-                    <input type="text" id="guestRoomCode" placeholder="Enter {{ROOM_CODE_LENGTH}}-character room code" maxlength="{{ROOM_CODE_LENGTH}}"
-                           style="text-transform: uppercase; font-family: monospace; font-size: 0.9rem; padding: 12px;">
+            <div class="space-y-4">
+                <div class="text-center">
+                    <h3 class="text-white font-medium">Have a room code?</h3>
+                    <p class="text-xs text-slate-500 mt-1">Join an existing session without logging in.</p>
                 </div>
-                <button class="btn secondary" id="guestJoinBtn" style="padding: 12px;">
-                    Join Room as Guest
-                </button>
-                <div id="guestError" class="alert error hidden" style="margin: 0;"></div>
+                <div class="space-y-3">
+                    <input type="text" id="guestRoomCode" placeholder="Enter {{ROOM_CODE_LENGTH}}-char room code" maxlength="{{ROOM_CODE_LENGTH}}" class="w-full bg-dark/50 border border-slate-700 rounded-xl px-4 py-3 text-white text-center font-mono uppercase placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition">
+                    <button id="guestJoinBtn" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-xl transition border border-white/5">Join Room as Guest</button>
+                    <div id="guestError" class="hidden p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center"></div>
+                </div>
             </div>
         </div>
 
-        <footer class="footer" style="margin-top: 40px;">
-            <div class="footer-bottom">
-                <p>2025 Tosync</p>
-            </div>
-        </footer>
+        <div class="bg-surface/30 p-4 text-center border-t border-white/5"><p class="text-xs text-slate-600">© 2025 ToSync</p></div>
     </div>
 
     <script>
-        const loginForm = document.getElementById('loginForm');
-        const errorMessage = document.getElementById('errorMessage');
-        const loginBtn = document.getElementById('loginBtn');
+        const REQUIRED_LENGTH = parseInt('{{ROOM_CODE_LENGTH}}');
+
+        const loginForm = document.getElementById('loginForm'), errorMessage = document.getElementById('errorMessage'), loginBtn = document.getElementById('loginBtn');
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-
+            const username = document.getElementById('username').value, password = document.getElementById('password').value;
             errorMessage.classList.add('hidden');
-            loginBtn.disabled = true;
-            loginBtn.textContent = 'Authenticating...';
-
+            loginBtn.disabled = true; const originalBtnText = loginBtn.textContent; loginBtn.textContent = 'Authenticating...'; loginBtn.classList.add('opacity-75', 'cursor-not-allowed');
             try {
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username, password }),
-                    credentials: 'include'
-                });
-
+                const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }), credentials: 'include' });
                 const data = await response.json();
-
                 if (response.ok) {
                     const urlParams = new URLSearchParams(window.location.search);
                     const redirect = urlParams.get('redirect') || '/';
                     const allowed = /^\/[a-zA-Z0-9]*$/;
                     window.location.href = allowed.test(redirect) ? redirect : '/';
                 } else {
-                    errorMessage.textContent = data.error || 'Invalid credentials';
-                    errorMessage.classList.remove('hidden');
-                    loginBtn.disabled = false;
-                    loginBtn.textContent = 'Login';
+                    errorMessage.textContent = data.error || 'Invalid credentials'; errorMessage.classList.remove('hidden'); loginBtn.disabled = false; loginBtn.textContent = originalBtnText; loginBtn.classList.remove('opacity-75', 'cursor-not-allowed');
                 }
-            } catch (error) {
-                console.error('Login error:', error);
-                errorMessage.textContent = 'Connection error. Please try again.';
-                errorMessage.classList.remove('hidden');
-                loginBtn.disabled = false;
-                loginBtn.textContent = 'Login';
-            }
+            } catch (error) { console.error('Login error:', error); errorMessage.textContent = 'Connection error. Please try again.'; errorMessage.classList.remove('hidden'); loginBtn.disabled = false; loginBtn.textContent = originalBtnText; loginBtn.classList.remove('opacity-75', 'cursor-not-allowed'); }
         });
 
-        // Guest join functionality
-        const guestRoomCode = document.getElementById('guestRoomCode');
-        const guestJoinBtn = document.getElementById('guestJoinBtn');
-        const guestError = document.getElementById('guestError');
+        const guestRoomCode = document.getElementById('guestRoomCode'), guestJoinBtn = document.getElementById('guestJoinBtn'), guestError = document.getElementById('guestError');
 
-        // Auto-uppercase and format room code
-        guestRoomCode.addEventListener('input', (e) => {
-            e.target.value = e.target.value.toUpperCase();
-        });
+        guestRoomCode.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); });
 
-        // Handle paste (extract room code from URL if pasted)
         guestRoomCode.addEventListener('paste', (e) => {
             e.preventDefault();
             const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-            let roomCode = pastedText;
+            let roomCode = pastedText.trim();
 
-            if (pastedText.includes('://') || pastedText.includes('/')) {
-                const parts = pastedText.split('/');
+            if (roomCode.endsWith('/')) {
+                roomCode = roomCode.slice(0, -1);
+            }
+
+            if (roomCode.includes('://') || roomCode.includes('/')) {
+                const parts = roomCode.split('/');
                 const lastSegment = parts[parts.length - 1];
-                if (lastSegment && lastSegment.length === 32) {
+
+                if (lastSegment && lastSegment.length === REQUIRED_LENGTH) {
                     roomCode = lastSegment;
                 } else {
-                    const match = pastedText.match(/[A-Z0-9]{32}/i);
+                    const regex = new RegExp(`[A-Z0-9]{${REQUIRED_LENGTH}}`, 'i');
+                    const match = roomCode.match(regex);
                     if (match) roomCode = match[0];
                 }
             }
 
-            e.target.value = roomCode.toUpperCase().slice(0, 32);
+            e.target.value = roomCode.toUpperCase().slice(0, REQUIRED_LENGTH);
         });
 
-        // Join room on Enter key
-        guestRoomCode.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                guestJoinBtn.click();
-            }
-        });
+        guestRoomCode.addEventListener('keypress', (e) => { if (e.key === 'Enter') { guestJoinBtn.click(); } });
 
-        // Join room button
         guestJoinBtn.addEventListener('click', () => {
-            const roomCode = guestRoomCode.value.trim().toUpperCase();
+            const roomCode = guestRoomCode.value.trim().toUpperCase(); guestError.classList.add('hidden');
 
-            guestError.classList.add('hidden');
-
-            if (roomCode.length !== {{ROOM_CODE_LENGTH}}) {
-                guestError.textContent = 'Please enter a valid {{ROOM_CODE_LENGTH}}-character room code';
+            if (roomCode.length !== REQUIRED_LENGTH) {
+                guestError.textContent = 'Please enter a valid ' + REQUIRED_LENGTH + '-character room code';
                 guestError.classList.remove('hidden');
                 return;
             }
 
-            // Validate format (alphanumeric)
-            if (!/^[A-Z0-9]{{{ROOM_CODE_LENGTH}}}$/.test(roomCode)) {
+            const codeRegex = new RegExp('^[A-Z0-9]{' + REQUIRED_LENGTH + '}$');
+            if (!codeRegex.test(roomCode)) {
                 guestError.textContent = 'Room code must contain only letters and numbers';
                 guestError.classList.remove('hidden');
                 return;
             }
 
-            // Redirect to room URL
             window.location.href = `/${roomCode}`;
         });
     </script>

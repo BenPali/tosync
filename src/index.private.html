@@ -1,379 +1,219 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tosync Private - Watch together, stay connected</title>
-
-    <!-- Socket.IO for real-time communication -->
+    <title>ToSync Advanced</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#dc2626',
+                        secondary: '#64748b',
+                        dark: '#0f172a',
+                        surface: '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
 
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Tosync Private</h1>
-            <p>Watch together, stay connected</p>
+<body class="min-h-screen flex flex-col bg-dark text-slate-200 antialiased font-[Inter]">
+
+    <nav class="border-b border-white/10 bg-surface/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="h-8 w-9 bg-primary rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/20 text-sm tracking-tight">Ta</div>
+                <h1 class="text-xl font-bold text-white">ToSync <span class="text-red-400 text-xs bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 tracking-wider">Advanced</span></h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <button id="logoutBtn" class="hidden text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/10 hover:border-red-500/30 px-3 py-1.5 rounded transition">Logout</button>
+            </div>
         </div>
+    </nav>
 
-        <!-- Landing Page (Guest Join Only) -->
-        <div class="landing-page hidden" id="landingPage" style="display: none;">
-            <div class="landing-container" style="max-width: 500px;">
-                <div class="landing-header">
-                    <h1>Tosync Private</h1>
-                    <p>Watch together, stay connected</p>
-                </div>
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl">
 
-                <div class="landing-card">
-                    <h3>🔗 Join Room as Guest</h3>
-                    <p>Enter a {{ROOM_CODE_LENGTH}}-character room code to join</p>
-                    <div class="form-group">
-                        <input type="text" id="roomCodeInput" placeholder="Enter room code" maxlength="32"
-                            style="text-transform: uppercase; font-family: monospace; font-size: 0.9rem;">
-                    </div>
-                    <button class="btn secondary" id="joinRoomBtn">Join Room</button>
-                    <div id="joinError" class="alert error hidden" style="margin-top: 12px;">Invalid room code</div>
-                </div>
-
-                <div style="text-align: center; margin-top: 24px; color: #718096;">
-                    <p>Need to create a room? <a href="/login" style="color: #3182ce; text-decoration: none;">Login as Admin</a></p>
+        <div id="landingPage" class="hidden max-w-md mx-auto mt-12 fade-in">
+            <div class="bg-surface border border-white/5 rounded-2xl p-8 shadow-2xl">
+                <h2 class="text-2xl font-bold text-white mb-2 text-center">Guest Access</h2>
+                <p class="text-slate-400 text-center mb-6 text-sm">Enter the code provided by the host.</p>
+                <input type="text" id="roomCodeInput" placeholder="Room Code" maxlength="32" class="w-full bg-dark border border-slate-700 text-white text-center text-lg font-mono py-3 px-4 rounded-xl focus:ring-2 focus:ring-primary outline-none uppercase mb-4 transition">
+                <button id="joinRoomBtn" class="w-full bg-primary hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg shadow-red-900/20">Join Room</button>
+                <div id="joinError" class="hidden mt-4 text-red-400 text-center text-sm">Invalid code</div>
+                <div class="mt-8 text-center pt-6 border-t border-white/5">
+                     <a href="/login" class="text-sm text-slate-500 hover:text-primary transition">Admin Login &rarr;</a>
                 </div>
             </div>
         </div>
 
-        <!-- Room Management (After Login) -->
-        <div class="section room-selector hidden" id="roomSelector">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div id="roomSelector" class="hidden max-w-4xl mx-auto fade-in">
+            <div class="flex justify-between items-center mb-8">
                 <div>
-                    <h3>Welcome, <span id="loggedInUsername"></span></h3>
-                    <p style="color: #718096; margin-top: 4px;">Create a new room or join an existing one</p>
+                    <h2 class="text-3xl font-bold text-white">Welcome, <span id="loggedInUsername" class="text-primary">User</span></h2>
+                    <p class="text-slate-400">Select an option to begin.</p>
                 </div>
-                <button class="btn secondary small" id="logoutBtn">Logout</button>
             </div>
-
-            <div class="room-options">
-                <!-- Create Room -->
-                <div class="room-option-card">
-                    <h4>🎬 Create New Room</h4>
-                    <p>Start a new watch party with full admin controls</p>
-                    <button class="btn" id="createRoomBtn">Create Room</button>
+            <div class="grid md:grid-cols-2 gap-6 room-options">
+                <div class="bg-surface border border-white/5 rounded-2xl p-6 hover:border-primary/50 transition group cursor-pointer">
+                    <h3 class="text-lg font-bold text-white mb-2">🎬 Create Room</h3>
+                    <button id="createRoomBtn" class="w-full bg-primary hover:bg-red-700 text-white py-2 rounded-lg font-semibold transition shadow-lg shadow-red-900/20">Create</button>
                 </div>
-
-                <!-- Join Room -->
-                <div class="room-option-card">
-                    <h4>🔗 Join Existing Room</h4>
-                    <p>Enter a {{ROOM_CODE_LENGTH}}-character room code</p>
-                    <div class="form-group">
-                        <input type="text" id="adminRoomCodeInput" placeholder="Enter room code" maxlength="32"
-                            style="text-transform: uppercase; font-family: monospace; font-size: 0.85rem;">
-                    </div>
-                    <button class="btn secondary" id="adminJoinRoomBtn">Join Room</button>
-                    <div id="adminJoinError" class="alert error hidden" style="margin-top: 12px;">Invalid room code</div>
+                <div class="bg-surface border border-white/5 rounded-2xl p-6 hover:border-white/20 transition group">
+                    <h3 class="text-lg font-bold text-white mb-2">🔗 Join Room</h3>
+                    <input type="text" id="adminRoomCodeInput" placeholder="Room Code" class="w-full bg-dark border border-slate-700 rounded-lg px-3 py-2 mb-3 text-sm font-mono text-white focus:ring-1 focus:ring-primary outline-none">
+                    <button id="adminJoinRoomBtn" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg font-semibold transition">Join</button>
+                    <div id="adminJoinError" class="hidden text-red-400 text-xs mt-2">Invalid code</div>
                 </div>
             </div>
         </div>
 
-        <!-- Room Not Found Page -->
-        <div class="section room-not-found hidden" id="roomNotFound">
-            <div style="text-align: center; padding: 40px 20px;">
-                <h3 style="color: #e53e3e; margin-bottom: 16px;">❌ Room Not Found</h3>
-                <p style="color: #718096; margin-bottom: 24px; font-size: 1.1rem;">
-                    The room code you entered doesn't exist or has expired.
-                </p>
-                <div style="background: #fed7d7; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
-                    <p style="color: #c53030; font-size: 0.9rem; margin: 0;">
-                        <strong>Room code:</strong> <span id="invalidRoomCode"
-                            style="font-family: monospace; letter-spacing: 1px;"></span>
-                    </p>
-                </div>
-                <button class="btn" id="goBackHomeBtn">🏠 Go Back to Home</button>
-            </div>
+        <div id="roomNotFound" class="hidden text-center py-20 fade-in">
+            <h3 class="text-2xl font-bold text-red-400 mb-2">Room Not Found</h3>
+            <span id="invalidRoomCode" class="font-mono text-slate-500 bg-white/5 px-2 py-1 rounded"></span>
+            <div class="mt-6"><button id="goBackHomeBtn" class="bg-slate-700 text-white px-4 py-2 rounded-lg">Go Back</button></div>
         </div>
 
-        <!-- Hidden role selector (kept for compatibility but not used) -->
-        <div class="section role-selector hidden" id="roleSelector"></div>
+        <div id="roleSelector" class="hidden"></div>
 
-        <!-- Main Application -->
-        <div id="mainApp" class="hidden">
-            <div class="connection-status" id="connectionStatus">
-                Connecting to server...
+        <div id="mainApp" class="hidden fade-in">
+            <div id="connectionStatus" class="mb-4 text-center text-xs text-primary">Connecting...</div>
+
+            <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 bg-surface border border-white/5 px-3 py-1.5 rounded-lg">
+                        <div id="roleIndicator" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"></div>
+                        <div id="userInfo" class="text-sm text-slate-300 font-medium"></div>
+                    </div>
+
+                    <button id="currentRoomCode" class="group flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 px-3 py-1.5 rounded-lg transition cursor-pointer" title="Click to copy URL">
+                        <span class="text-[10px] uppercase font-bold tracking-wider opacity-70">Room</span>
+                        <span class="font-mono font-bold text-sm">...</span>
+                        <span class="hidden group-hover:inline text-xs opacity-75">📋</span>
+                    </button>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="resetRoleBtn" class="hidden text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg transition">Switch</button>
+                    <button id="leaveRoomBtn" class="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/10 hover:border-red-500/20 px-4 py-1.5 rounded-lg transition font-medium">Leave Room</button>
+                </div>
             </div>
 
-            <!-- Room Header -->
-            <div class="room-header">
-                <div class="room-badge">
-                    Room: <span id="currentRoomCode" title="Click to copy room URL" style="font-family: monospace; font-size: 0.8rem;"></span>
+            <div class="grid lg:grid-cols-3 gap-6">
+
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="relative bg-black rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 aspect-video">
+                        <video id="videoPlayer" class="w-full h-full" controls preload="metadata" crossorigin="anonymous"></video>
+                    </div>
+
+                    <div class="bg-surface p-3 rounded-xl border border-white/5 flex flex-wrap gap-2 justify-between items-center">
+                        <button id="togglePlayBtn" class="bg-white text-dark hover:bg-slate-200 px-4 py-1.5 rounded font-bold text-sm min-w-[80px]">Play</button>
+                        <div class="flex gap-2">
+                            <button id="seekBackBtn" class="bg-slate-700 text-white px-3 py-1.5 rounded text-xs">-10s</button>
+                            <button id="seekForwardBtn" class="bg-slate-700 text-white px-3 py-1.5 rounded text-xs">+10s</button>
+                        </div>
+                        <button id="fullscreenBtn" class="bg-slate-700 text-white px-3 py-1.5 rounded text-xs">⛶</button>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-surface p-3 rounded border border-white/5">
+                             <p class="text-[10px] text-slate-500 font-bold uppercase">MEDIA</p>
+                             <p id="mediaStatus" class="text-xs text-white truncate">None</p>
+                             <div class="h-1 bg-slate-700 rounded mt-1 overflow-hidden"><div id="progressFill" class="h-full bg-primary w-0"></div></div>
+                        </div>
+                        <div class="bg-surface p-3 rounded border border-white/5">
+                             <p class="text-[10px] text-slate-500 font-bold uppercase">STATUS</p>
+                             <p id="roomStatus" class="text-xs text-primary">Active</p>
+                             <p id="connectedUsers" class="text-[10px] text-slate-400">0 users</p>
+                        </div>
+                        <div class="bg-surface p-3 rounded border border-white/5">
+                             <p class="text-[10px] text-slate-500 font-bold uppercase">SYNC</p>
+                             <p id="syncStatus" class="text-xs text-white">Ready</p>
+                             <p id="lastAction" class="text-[10px] text-slate-400">None</p>
+                        </div>
+                    </div>
+
+                    <div id="torrentInfo" class="hidden bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                        <h3 class="text-xs font-bold text-emerald-400 mb-3 uppercase">Torrent Stream Status</h3>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs text-slate-300">
+                             <div><span class="block text-slate-500">Speed</span><span id="downloadSpeed">-</span></div>
+                             <div><span class="block text-slate-500">Downloaded</span><span id="downloaded">-</span></div>
+                             <div><span class="block text-slate-500">Peers</span><span id="numPeers">-</span></div>
+                             <div><span class="block text-slate-500">Size</span><span id="torrentSize">-</span></div>
+                        </div>
+                        <div class="mt-2 text-xs truncate text-slate-400"><span class="text-slate-500">File:</span> <span id="torrentName">-</span></div>
+                        <div id="fileList" class="mt-2"></div>
+                    </div>
                 </div>
-                <div class="room-user-info">
-                    <div class="role-indicator" id="roleIndicator"></div>
-                    <div id="userInfo" style="color: #718096; font-size: 0.9rem;"></div>
+
+                <div class="space-y-4">
+
+                    <div id="adminControls" class="hidden bg-surface border border-primary/20 rounded-xl overflow-hidden">
+                        <div class="bg-primary/10 p-3 border-b border-primary/20"><h3 class="font-bold text-primary text-sm uppercase">Admin Panel</h3></div>
+                        <div class="p-3 space-y-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 mb-1">LOCAL FILE</label>
+                                <div class="flex gap-2">
+                                    <input type="file" id="fileInput" class="text-xs text-slate-400 w-full"/>
+                                    <button id="clearMediaBtn" class="text-red-400 text-xs">🗑️</button>
+                                </div>
+                                <button id="uploadBtn" class="w-full mt-2 bg-slate-700 hover:bg-slate-600 text-white text-xs py-1.5 rounded">Stream File</button>
+                            </div>
+                            <hr class="border-white/5">
+                            <div>
+                                <label class="block text-[10px] font-bold text-green-500 mb-1">MAGNET LINK</label>
+                                <input type="text" id="torrentInput" placeholder="magnet:?xt=..." class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                <button id="loadTorrentBtn" class="w-full bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30 text-xs py-1.5 rounded transition">⚡ Stream Torrent</button>
+                            </div>
+                            <hr class="border-white/5">
+                            <details class="group"><summary class="cursor-pointer text-xs text-slate-400 hover:text-white flex justify-between"><span>Subtitles</span><span>▼</span></summary>
+                                <div class="pt-2 space-y-2">
+                                    <input type="file" id="subtitleInput" class="text-xs w-full"/>
+                                    <input type="text" id="subtitleLanguage" placeholder="Lang" class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary outline-none">
+                                    <button id="uploadSubtitleBtn" class="w-full bg-slate-700 text-white text-xs py-1 rounded">Add</button>
+                                </div>
+                            </details>
+                            <details class="group"><summary class="cursor-pointer text-xs text-slate-400 hover:text-white flex justify-between"><span>Library</span><span>▼</span></summary>
+                                <div class="pt-2">
+                                    <button id="refreshLibraryBtn" class="text-xs text-primary hover:underline mb-2">Refresh</button>
+                                    <div id="uploadedFilesList" class="text-xs text-slate-300 mb-2"></div>
+                                    <div id="downloadedFilesList" class="text-xs text-emerald-400"></div>
+                                    <div id="libraryStatus" class="text-[10px] text-slate-500">Empty</div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
+                     <div class="bg-surface border border-white/5 rounded-xl p-3">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-2">Users</h3>
+                        <div id="usersList" class="space-y-1 text-xs text-slate-300 max-h-32 overflow-y-auto"></div>
+                        <div id="adminUserInstructions" class="hidden text-[10px] text-primary mt-2">Tip: Click user to manage.</div>
+                    </div>
+                    <div id="subtitleSection" class="bg-surface border border-white/5 rounded-xl p-3 hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-2">Subtitles</h3>
+                        <div id="subtitlesList" class="text-xs space-y-1"></div>
+                    </div>
                 </div>
-                <button class="btn secondary small" id="leaveRoomBtn">Leave Room</button>
             </div>
 
-            <!-- Hidden reset role button -->
-            <button class="btn secondary hidden" id="resetRoleBtn"
-                style="margin-top: 12px; font-size: 0.8rem; padding: 6px 12px;">Switch Role</button>
-
-            <!-- Admin Controls -->
-            <div class="section" id="adminControls">
-                <details open style="margin-top: 0;">
-                    <summary
-                        style="cursor: pointer; font-weight: 600; color: #2d3748; font-size: 1.1rem; margin-bottom: 16px;">
-                        📁 Content Management</summary>
-                    <div style="margin-top: 16px;">
-                        <div class="form-group">
-                            <label for="fileInput">Upload Video File (Recommended):</label>
-                            <input type="file" id="fileInput" accept=".mp4,.mkv,.avi,.webm,.mov" style="margin-bottom: 8px;">
-                            <small style="color: #718096;">Supports MP4, MKV, AVI, WebM, MOV - Up to 10GB</small>
-                        </div>
-
-                        <button class="btn" id="uploadBtn">📁 Upload & Stream Video</button>
-                        <button class="btn danger" id="clearMediaBtn">🗑️ Clear Media</button>
-
-                        <div class="divider"></div>
-
-                        <!-- Subtitle Upload -->
-                        <details style="margin-top: 16px;">
-                            <summary style="cursor: pointer; font-weight: 500; color: #718096;">📝 Subtitle Management</summary>
-                            <div style="margin-top: 12px;">
-                                <div class="form-group">
-                                    <label for="subtitleInput">Subtitle File:</label>
-                                    <input type="file" id="subtitleInput" accept=".srt,.vtt,.ass,.ssa,.sub"
-                                        style="margin-bottom: 8px;">
-                                    <small style="color: #718096;">Supports SRT, VTT, ASS, SSA, SUB - Up to 5MB</small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="subtitleLanguage">Language (optional):</label>
-                                    <input type="text" id="subtitleLanguage" placeholder="e.g., English, Spanish, French">
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="subtitleLabel">Display Name (optional):</label>
-                                    <input type="text" id="subtitleLabel" placeholder="e.g., English SDH, Spanish">
-                                </div>
-
-                                <button class="btn secondary" id="uploadSubtitleBtn">📝 Upload Subtitle</button>
-                            </div>
-                        </details>
-
-                        <div class="divider"></div>
-
-                        <!-- File Library -->
-                        <details style="margin-top: 16px;">
-                            <summary style="cursor: pointer; font-weight: 500; color: #718096;">📚 File Library</summary>
-                            <div style="margin-top: 12px;">
-                                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                                    <button class="btn secondary" id="refreshLibraryBtn">🔄 Refresh Library</button>
-                                </div>
-                                <div id="libraryStatus" style="margin-top: 8px; font-size: 0.9rem; color: #718096;">Click
-                                    refresh to load files</div>
-
-                                <!-- Uploaded Files -->
-                                <div id="uploadedFiles" style="margin-top: 16px;">
-                                    <h4 style="margin-bottom: 8px; color: #2b6cb0;">📁 Uploaded Files</h4>
-                                    <div id="uploadedFilesList" class="file-library-list"></div>
-                                </div>
-
-                                <!-- Downloaded Files (from torrents) -->
-                                <div id="downloadedFiles" style="margin-top: 16px;">
-                                    <h4 style="margin-bottom: 8px; color: #22c55e;">⬇️ Downloaded Files</h4>
-                                    <div id="downloadedFilesList" class="file-library-list"></div>
-                                </div>
-                            </div>
-                        </details>
-
-                        <div class="divider"></div>
-
-                        <!-- Torrent section (PRIVATE ONLY) -->
-                        <details style="margin-top: 16px;">
-                            <summary style="cursor: pointer; font-weight: 500; color: #718096;">🧲 Advanced: Magnet Links
-                            </summary>
-                            <div style="margin-top: 12px;">
-                                <div class="alert warning" style="margin-bottom: 16px;">
-                                    <strong>⚠️ Legal Disclaimer:</strong> Users are solely responsible for the content they
-                                    stream via torrent links. This platform does not host, store, or distribute any copyrighted
-                                    content. Please ensure you have the legal right to access and share any torrents you use.
-                                    The platform operators cannot be held liable for any misuse of this feature or copyright
-                                    violations.
-                                </div>
-                                <div class="form-group">
-                                    <label for="torrentInput">Magnet Link:</label>
-                                    <input type="text" id="torrentInput"
-                                        placeholder="magnet:?xt=urn:btih:... (server-side streaming)">
-                                </div>
-                                <button class="btn secondary" id="loadTorrentBtn">⚡ Stream via Magnet Link</button>
-                            </div>
-                        </details>
-                    </div>
-                </details>
-            </div>
-
-            <!-- Player Section -->
-            <div class="section">
-                <h3>Player</h3>
-                <div class="alert success">
-                    <strong>🔄 Auto-Sync:</strong> Any play/pause action or time seeking is automatically synchronized
-                    with all users in this room.
-                </div>
-                <div class="video-container">
-                    <video id="videoPlayer" controls preload="metadata" crossorigin="anonymous">
-                        Your browser does not support the video tag.
-                    </video>
-                </div>
-
-                <!-- Basic Controls -->
-                <div class="controls">
-                    <button class="btn" id="togglePlayBtn">Play/Pause</button>
-                    <button class="btn" id="seekBackBtn">-10s</button>
-                    <button class="btn" id="seekForwardBtn">+10s</button>
-                    <button class="btn" id="fullscreenBtn">Fullscreen</button>
-                </div>
-
-                <!-- Admin Controls -->
-                <div id="adminPlayerControls" class="hidden">
-                    <div class="divider"></div>
-                    <div class="controls">
-                        <button class="btn secondary" id="syncTimeBtn">🔄 Force Sync</button>
-                        <button class="btn secondary" id="restartBtn">⏮️ Restart</button>
-                        <button class="btn secondary" id="rate05Btn">0.5x</button>
-                        <button class="btn secondary" id="rate1Btn">1x</button>
-                        <button class="btn secondary" id="rate15Btn">1.5x</button>
-                    </div>
-                </div>
-
-                <!-- Status Grid -->
-                <div class="status-grid">
-                    <div class="status-card">
-                        <h4>Media Status</h4>
-                        <p id="mediaStatus">No media loaded</p>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-                        </div>
-                    </div>
-
-                    <div class="status-card">
-                        <h4>Room Status</h4>
-                        <p id="roomStatus">Connecting...</p>
-                        <p id="connectedUsers" style="font-size: 0.85rem; color: #718096; margin-top: 4px;">0 users</p>
-                    </div>
-
-                    <div class="status-card">
-                        <h4>Sync Status</h4>
-                        <p id="syncStatus">Initializing...</p>
-                        <p id="lastAction" style="font-size: 0.85rem; color: #718096; margin-top: 4px;">No recent
-                            actions
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Torrent Info (PRIVATE ONLY) -->
-                <div class="section hidden" id="torrentInfo">
-                    <h3>Torrent Details</h3>
-                    <div
-                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
-                        <div>
-                            <strong>Name:</strong> <span id="torrentName">-</span>
-                        </div>
-                        <div>
-                            <strong>Size:</strong> <span id="torrentSize">-</span>
-                        </div>
-                        <div>
-                            <strong>Downloaded:</strong> <span id="downloaded">-</span>
-                        </div>
-                        <div>
-                            <strong>Speed:</strong> <span id="downloadSpeed">-</span>
-                        </div>
-                        <div>
-                            <strong>Peers:</strong> <span id="numPeers">-</span>
-                        </div>
-                    </div>
-                    <div class="file-list" id="fileList"></div>
-                </div>
-
-                <!-- Subtitle Selection -->
-                <div class="section" id="subtitleSection" style="display: none;">
-                    <h3>Subtitles</h3>
-
-                    <div class="subtitles-list" id="subtitlesList">
-                        <div class="subtitle-option selected">
-                            <span>No Subtitles</span>
-                            <span style="color: #718096; font-size: 0.85rem;">Off</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Connected Users -->
-                <div class="section">
-                    <h3>Connected Users</h3>
-                    <div id="adminUserInstructions"
-                        style="display: none; margin-bottom: 12px; padding: 8px; background: #e6fffa; border-left: 3px solid #38b2ac; font-size: 0.85rem;">
-                        👑 <strong>Admin tip:</strong> Click on any user to manage them (transfer admin rights or kick
-                        from room)
-                    </div>
-                    <div class="users-list" id="usersList">
-                        <div class="user-item">Loading...</div>
-                    </div>
-                </div>
+            <div id="adminPlayerControls" class="hidden">
+                 <button id="syncTimeBtn"></button><button id="restartBtn"></button>
+                 <button id="rate1Btn"></button><button id="rate15Btn"></button>
             </div>
         </div>
+    </main>
 
-        <!-- Footer -->
-        <footer class="footer">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h4>Tosync</h4>
-                    <p>Watch together, stay connected</p>
-                    <p style="font-size: 0.8rem; color: #718096; margin-top: 8px;">
-                        Version 2.3.0 - Built with ❤️ by Ben Pali
-                    </p>
-                </div>
-
-                <div class="footer-section">
-                    <h4>Resources</h4>
-                    <div class="footer-links">
-                        <a href="https://github.com/benpali/tosync" target="_blank" rel="noopener noreferrer">
-                            📂 GitHub Repository
-                        </a>
-                        <a href="https://github.com/benpali/tosync/issues" target="_blank" rel="noopener noreferrer">
-                            🐛 Report Issues
-                        </a>
-                        <a href="https://github.com/benpali/tosync/blob/main/README.md" target="_blank"
-                            rel="noopener noreferrer">
-                            📖 Documentation
-                        </a>
-                    </div>
-                </div>
-
-                <div class="footer-section">
-                    <h4>Legal</h4>
-                    <div class="footer-disclaimer">
-                        <p style="font-size: 0.8rem; color: #718096;">
-                            This is a personal project for private usage purposes. Users are responsible for compliance
-                            with applicable laws and regulations when using torrent features.
-                        </p>
-                        <p style="font-size: 0.8rem; color: #718096; margin-top: 8px;">
-                            Released under
-                            <a href="https://github.com/benpali/tosync/blob/main/LICENSE" target="_blank"
-                                rel="noopener noreferrer">
-                                MIT License
-                            </a>
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="footer-bottom">
-                <p>2025 Tosync. Made for friends and family. Use responsibly.</p>
-            </div>
-        </footer>
-
-        <!-- Load the main JavaScript module -->
-        <script type="module" src="js/main.js"></script>
+    <footer class="mt-12 py-6 border-t border-white/5 text-center text-xs text-slate-600">
+        <p>ToSync Advanced</p>
+    </footer>
+    <script type="module" src="js/main.js"></script>
 </body>
-
 </html>
