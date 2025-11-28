@@ -114,13 +114,24 @@
                         <video id="videoPlayer" class="w-full h-full" controls preload="metadata" crossorigin="anonymous"></video>
                     </div>
 
-                    <div class="bg-surface p-3 rounded-xl border border-white/5 flex flex-wrap gap-2 justify-between items-center">
-                        <button id="togglePlayBtn" class="bg-white text-dark hover:bg-slate-200 px-4 py-1.5 rounded font-bold text-sm min-w-[80px]">Play</button>
+                    <div class="bg-surface p-3 rounded-xl border border-white/5 flex flex-wrap gap-4 justify-center sm:justify-between items-center">
+                        <button id="togglePlayBtn" class="bg-white text-dark hover:bg-slate-200 px-6 py-2 rounded-lg font-bold transition flex items-center gap-2">
+                            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            <span>Play</span>
+                        </button>
+
                         <div class="flex gap-2">
-                            <button id="seekBackBtn" class="bg-slate-700 text-white px-3 py-1.5 rounded text-xs">-10s</button>
-                            <button id="seekForwardBtn" class="bg-slate-700 text-white px-3 py-1.5 rounded text-xs">+10s</button>
+                            <button id="seekBackBtn" class="bg-slate-700 hover:bg-slate-600 hover:text-primary text-white p-2.5 rounded-lg transition" title="-10s">
+                                <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
+                            </button>
+                            <button id="seekForwardBtn" class="bg-slate-700 hover:bg-slate-600 hover:text-primary text-white p-2.5 rounded-lg transition" title="+10s">
+                                <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
+                            </button>
                         </div>
-                        <button id="fullscreenBtn" class="bg-slate-700 text-white px-3 py-1.5 rounded text-xs">⛶</button>
+
+                        <button id="fullscreenBtn" class="bg-slate-700 hover:bg-slate-600 hover:text-primary text-white p-2.5 rounded-lg transition" title="Fullscreen">
+                            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        </button>
                     </div>
 
                     <div class="grid grid-cols-3 gap-2">
@@ -168,8 +179,19 @@
                                 <button id="uploadBtn" class="w-full mt-2 bg-slate-700 hover:bg-slate-600 text-white text-xs py-1.5 rounded">Stream File</button>
                             </div>
                             <hr class="border-white/5">
+
+                            <div id="adminPlayerControls" class="grid grid-cols-2 gap-2">
+                                <button id="syncTimeBtn" class="col-span-2 bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded transition">Force Sync</button>
+                                <button id="restartBtn" class="bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded transition">Restart</button>
+                                <div class="flex bg-slate-800 rounded">
+                                    <button id="rate1Btn" class="flex-1 text-xs text-white hover:bg-slate-700 rounded-l transition">1x</button>
+                                    <button id="rate15Btn" class="flex-1 text-xs text-white hover:bg-slate-700 rounded-r transition">1.5x</button>
+                                </div>
+                            </div>
+                            <hr class="border-white/5">
+
                             <div>
-                                <label class="block text-[10px] font-bold text-green-500 mb-1">MAGNET LINK</label>
+                                <label class="block text-[10px] font-bold text-emerald-500 mb-1">MAGNET LINK</label>
                                 <input type="text" id="torrentInput" placeholder="magnet:?xt=..." class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-emerald-500 outline-none">
                                 <button id="loadTorrentBtn" class="w-full bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30 text-xs py-1.5 rounded transition">⚡ Stream Torrent</button>
                             </div>
@@ -202,11 +224,6 @@
                         <div id="subtitlesList" class="text-xs space-y-1"></div>
                     </div>
                 </div>
-            </div>
-
-            <div id="adminPlayerControls" class="hidden">
-                 <button id="syncTimeBtn"></button><button id="restartBtn"></button>
-                 <button id="rate1Btn"></button><button id="rate15Btn"></button>
             </div>
         </div>
     </main>

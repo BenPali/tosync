@@ -72,7 +72,8 @@ export class TorrentManager {
             return;
         }
 
-        const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream`;
+        const socketId = state.socket ? state.socket.id : '';
+        const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream?socketId=${socketId}`;
 
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
@@ -208,7 +209,13 @@ export class TorrentManager {
             state.videoPlayer.onloadedmetadata = null;
             state.videoPlayer.onerror = null;
 
-            state.videoPlayer.src = state.currentTorrentInfo.streamUrl;
+            let url = state.currentTorrentInfo.streamUrl;
+            if (url.includes('?socketId=')) {
+                url = url.split('?')[0];
+            }
+            const socketId = state.socket ? state.socket.id : '';
+            state.videoPlayer.src = `${url}?socketId=${socketId}`;
+
             state.videoPlayer.currentTime = videoState.currentTime || 0;
             state.videoPlayer.playbackRate = videoState.playbackRate || 1;
 
