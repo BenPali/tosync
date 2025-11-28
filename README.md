@@ -21,14 +21,28 @@ Use https://tosync.org or follow these steps for local use:
    npm install
    ```
 
-2. **Start the server**
+2. ** Build & Start the server**
+2.1 ** Public app **
    ```bash
-   npm start
+   npm run build
+   npm run start
    ```
 
+2.1 ** Advanced app (requires login) **
+   ```bash
+   npm run build
+   npm run start:torrent
+   ```
+
+
 3. **Open in browser**
+   Public
    ```
    http://localhost:3000
+   ```
+   Advanced
+   ```
+   http://localhost:3001
    ```
 
 ## Usage
@@ -38,23 +52,10 @@ Use https://tosync.org or follow these steps for local use:
 3. **Share the room** - Friends join using the 6-character room code or URL
 4. **Watch together** - All playback actions are automatically synchronized
 
-## Room Management
-
-Tosync now uses a **room-based system**:
-- **Create rooms** - Anyone can create a new room and become the admin automatically
-- **Join rooms** - Enter a 6-character room code or paste the room URL to join
-- **No passwords needed** - Room creators are automatically made admins
-- **Admin succession** - If an admin leaves, the next user is automatically promoted
-
 ## TODO
 - Fetch subtitles automatically from an API source rather than uploading them manually
 - Fix minor issues related to video player
 - Vulnerability analysis and patching for uploads and torrents
-- Sanitize text inputs
-
-## Legal Notice
-
-⚠️ **Important**: Users are solely responsible for the content they stream via torrent links. This platform does not host, store, or distribute any copyrighted content. Please ensure you have the legal right to access and share any content you use.
 
 ## License
 

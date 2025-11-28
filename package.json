@@ -1,6 +1,6 @@
 {
   "name": "tosync",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "Synchronized video streaming",
   "main": "server.js",
   "type": "module",
@@ -9,6 +9,7 @@
     "clean": "rm -rf public private",
     "rebuild": "npm run clean && npm run build",
     "start": "node server.js",
+    "start:torrent": "PORT=3001 ENABLE_TORRENTS=true node server.js",
     "dev": "nodemon server.js"
   },
   "keywords": [
