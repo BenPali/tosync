@@ -219,7 +219,9 @@ export class AuthManager {
         }
 
         state.currentTorrentInfo = null;
-        torrentManager.clearTorrentProgress();
+        if (torrentManager) {
+            torrentManager.clearTorrentProgress();
+        }
         state.lastMediaAction = null;
         state.availableSubtitles = [];
         state.selectedSubtitleId = null;

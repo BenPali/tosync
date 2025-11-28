@@ -18,7 +18,6 @@ export class VideoPlayer {
     // Event handlers for automatic synchronization
     handlePlay() {
         if (!state.isReceivingSync && state.isConnected) {
-            console.log('Video played, broadcasting sync');
             socketManager.broadcastVideoAction('play', state.videoPlayer.currentTime);
             uiManager.updateLastAction(`${state.userName} played video`);
         }
@@ -26,7 +25,6 @@ export class VideoPlayer {
 
     handlePause() {
         if (!state.isReceivingSync && state.isConnected) {
-            console.log('Video paused, broadcasting sync');
             socketManager.broadcastVideoAction('pause', state.videoPlayer.currentTime);
             uiManager.updateLastAction(`${state.userName} paused video`);
         }
@@ -34,7 +32,6 @@ export class VideoPlayer {
 
     handleRateChange() {
         if (!state.isReceivingSync && state.isConnected) {
-            console.log('Playback rate changed, broadcasting sync');
             socketManager.broadcastVideoAction('playback-rate', state.videoPlayer.currentTime, state.videoPlayer.playbackRate);
             uiManager.updateLastAction(`${state.userName} changed speed to ${state.videoPlayer.playbackRate}x`);
         }

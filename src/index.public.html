@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ToSync</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { primary: '#3b82f6', secondary: '#64748b', dark: '#0f172a', surface: '#1e293b' }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="min-h-screen flex flex-col bg-dark text-slate-200 antialiased font-[Inter]">
+
+    <nav class="border-b border-white/10 bg-surface/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="h-8 w-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">T</div>
+                <h1 class="text-xl font-bold text-white">ToSync</h1>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl">
+
+        <div id="roomSelector" class="max-w-4xl mx-auto fade-in">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-white mb-4">Watch together.</h2>
+                <p class="text-lg text-slate-400">Synchronized video playback for you and your friends.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-surface border border-white/5 rounded-2xl p-8 hover:border-primary/50 transition duration-300 group">
+                    <div class="text-3xl mb-4">🎬</div>
+                    <h3 class="text-xl font-bold text-white mb-2">Create New Room</h3>
+                    <p class="text-slate-400 mb-6 text-sm">Start a session as admin. You control the playback.</p>
+                    <button id="createRoomBtn" class="w-full bg-primary hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-xl transition shadow-lg shadow-blue-500/20">Create Room</button>
+                </div>
+
+                <div class="bg-surface border border-white/5 rounded-2xl p-8 hover:border-emerald-500/50 transition duration-300 group">
+                    <div class="text-3xl mb-4">🔗</div>
+                    <h3 class="text-xl font-bold text-white mb-2">Join Existing Room</h3>
+                    <p class="text-slate-400 mb-6 text-sm">Enter the code shared by your friend.</p>
+                    <input type="text" id="roomCodeInput" placeholder="Enter {{ROOM_CODE_LENGTH}}-char code" maxlength="{{ROOM_CODE_LENGTH}}" class="w-full bg-dark border border-slate-700 text-white text-center text-lg font-mono py-3 px-4 rounded-xl mb-4 focus:ring-2 focus:ring-emerald-500 outline-none uppercase placeholder:text-slate-600 placeholder:normal-case">
+                    <button id="joinRoomBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl transition shadow-lg shadow-emerald-500/20">Join Room</button>
+                    <div id="joinError" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">Invalid room code</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="roomNotFound" class="hidden max-w-md mx-auto text-center py-20 fade-in">
+            <div class="text-4xl mb-4">❌</div>
+            <h3 class="text-2xl font-bold text-white mb-2">Room Not Found</h3>
+            <p class="text-slate-400 mb-8">Code <span id="invalidRoomCode" class="font-mono text-white bg-white/10 px-2 py-1 rounded"></span> is invalid.</p>
+            <button id="goBackHomeBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl transition">Back to Home</button>
+        </div>
+
+        <div id="roleSelector" class="hidden"></div>
+        <div id="adminUserInstructions" class="hidden"></div>
+
+        <div id="mainApp" class="hidden fade-in">
+            <div id="connectionStatus" class="mb-4 text-center text-sm text-blue-400 animate-pulse">Connecting...</div>
+
+            <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 bg-surface border border-white/5 px-3 py-1.5 rounded-lg">
+                        <div id="roleIndicator" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"></div>
+                        <div id="userInfo" class="text-sm text-slate-300 font-medium"></div>
+                    </div>
+
+                    <button id="currentRoomCode" class="group flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 px-3 py-1.5 rounded-lg transition cursor-pointer" title="Click to copy URL">
+                        <span class="text-[10px] uppercase font-bold tracking-wider opacity-70">Room</span>
+                        <span class="font-mono font-bold text-sm">...</span>
+                        <span class="hidden group-hover:inline text-xs opacity-75">📋</span>
+                    </button>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="resetRoleBtn" class="hidden text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg transition">Switch</button>
+                    <button id="leaveRoomBtn" class="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/10 hover:border-red-500/20 px-4 py-1.5 rounded-lg transition font-medium">Leave Room</button>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="relative bg-black rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 aspect-video">
+                        <video id="videoPlayer" class="w-full h-full" controls preload="metadata" crossorigin="anonymous"></video>
+                    </div>
+
+                    <div class="bg-surface p-4 rounded-xl border border-white/5 flex flex-wrap gap-2 justify-between items-center">
+                        <button id="togglePlayBtn" class="bg-white text-dark hover:bg-slate-200 px-6 py-2 rounded-lg font-bold transition">Play/Pause</button>
+                        <div class="flex gap-2">
+                            <button id="seekBackBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">-10s</button>
+                            <button id="seekForwardBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">+10s</button>
+                        </div>
+                        <button id="fullscreenBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">⛶</button>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="bg-surface p-3 rounded-lg border border-white/5">
+                            <h4 class="text-[10px] uppercase text-slate-500 font-bold mb-1">Media</h4>
+                            <p id="mediaStatus" class="text-sm text-white truncate">No media</p>
+                            <div class="h-1 w-full bg-slate-700 rounded-full mt-2 overflow-hidden"><div id="progressFill" class="h-full bg-primary w-0"></div></div>
+                        </div>
+                        <div class="bg-surface p-3 rounded-lg border border-white/5">
+                            <h4 class="text-[10px] uppercase text-slate-500 font-bold mb-1">Users</h4>
+                            <p id="roomStatus" class="text-sm text-emerald-400">Active</p>
+                            <p id="connectedUsers" class="text-xs text-slate-400">0 connected</p>
+                        </div>
+                        <div class="bg-surface p-3 rounded-lg border border-white/5">
+                            <h4 class="text-[10px] uppercase text-slate-500 font-bold mb-1">Sync</h4>
+                            <p id="syncStatus" class="text-sm text-white">Ready</p>
+                            <p id="lastAction" class="text-xs text-slate-400 truncate">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div id="adminControls" class="hidden bg-surface border border-blue-500/20 rounded-xl overflow-hidden">
+                        <div class="bg-blue-500/10 p-3 border-b border-blue-500/20"><h3 class="font-bold text-blue-400 text-sm uppercase">👑 Admin Panel</h3></div>
+                        <div class="p-4 border-b border-white/5">
+                            <label class="block text-xs font-semibold text-slate-400 mb-2">UPLOAD VIDEO</label>
+                            <input type="file" id="fileInput" accept=".mp4,.mkv,.avi,.webm,.mov" class="block w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-slate-700 file:text-white mb-2"/>
+                            <div class="flex gap-2">
+                                <button id="uploadBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded transition">Load</button>
+                                <button id="clearMediaBtn" class="bg-red-500/20 text-red-400 px-3 rounded text-xs">🗑️</button>
+                            </div>
+                        </div>
+                        <div id="adminPlayerControls" class="p-4 grid grid-cols-2 gap-2 border-b border-white/5 hidden">
+                            <button id="syncTimeBtn" class="col-span-2 bg-slate-700 text-white text-xs py-2 rounded">Force Sync</button>
+                            <button id="restartBtn" class="bg-slate-700 text-white text-xs py-2 rounded">Restart</button>
+                            <div class="flex bg-slate-800 rounded"><button id="rate1Btn" class="flex-1 text-xs text-white">1x</button><button id="rate15Btn" class="flex-1 text-xs text-white">1.5x</button></div>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <details class="group"><summary class="cursor-pointer text-sm text-slate-400 hover:text-white flex justify-between"><span>📝 Subtitles</span><span>▼</span></summary>
+                                <div class="pt-3 space-y-2">
+                                    <input type="file" id="subtitleInput" class="text-xs text-slate-500 w-full"/>
+                                    <input type="text" id="subtitleLanguage" placeholder="Lang" class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs">
+                                    <input type="text" id="subtitleLabel" placeholder="Label" class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs">
+                                    <button id="uploadSubtitleBtn" class="w-full bg-slate-700 text-white text-xs py-1.5 rounded">Add</button>
+                                </div>
+                            </details>
+                            <details class="group"><summary class="cursor-pointer text-sm text-slate-400 hover:text-white flex justify-between"><span>📚 Library</span><span>▼</span></summary>
+                                <div class="pt-3">
+                                    <button id="refreshLibraryBtn" class="text-xs text-primary hover:underline mb-2">Refresh</button>
+                                    <div id="uploadedFilesList" class="text-xs space-y-1 max-h-32 overflow-y-auto"></div>
+                                    <div id="libraryStatus" class="text-xs text-slate-500 italic">Empty</div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
+                    <div class="bg-surface border border-white/5 rounded-xl p-4">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Room Members</h3>
+                        <div id="usersList" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                    </div>
+                    <div id="subtitleSection" class="bg-surface border border-white/5 rounded-xl p-4 hidden">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Subtitles</h3>
+                        <div id="subtitlesList" class="space-y-1 max-h-32 overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-white/5 bg-surface/30 mt-12 py-8 text-center text-xs text-slate-600">
+        <p>2025 ToSync</p>
+    </footer>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

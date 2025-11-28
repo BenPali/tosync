@@ -1,0 +1,92 @@
+/* =========================================
+   BASE THEME & SCROLLBARS
+   ========================================= */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #0f172a; /* Slate 900 */
+  color: #e2e8f0; /* Slate 200 */
+}
+
+/* Custom Webkit Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* =========================================
+   UTILITIES
+   ========================================= */
+.hidden {
+  display: none !important;
+}
+
+/* Smooth Fade Animation */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Details/Summary: Remove default triangle */
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* =========================================
+   CUSTOM INPUTS
+   ========================================= */
+/* Range Input Reset */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none; /* Standard property added */
+  background: transparent;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none; /* Standard property added */
+}
+input[type=range]:focus {
+  outline: none;
+}
+
+/* =========================================
+   FILE LIBRARY STATUSES (Preserving Logic)
+   ========================================= */
+/* Base item style */
+.library-file-item {
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+}
+.library-file-item:hover {
+    background-color: rgba(51, 65, 85, 0.5);
+}
+
+/* Uploaded Files (Blue) */
+.library-file-item.uploaded {
+    border-left-color: #3b82f6;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%);
+}
+
+/* Downloaded/Torrent Files (Green) */
+.library-file-item.downloaded {
+    border-left-color: #22c55e;
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.1) 0%, transparent 100%);
+}
