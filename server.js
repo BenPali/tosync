@@ -12,6 +12,7 @@ import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
+import { fileTypeFromBuffer } from 'file-type';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,10 +20,18 @@ const __dirname = dirname(__filename);
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ENABLE_TORRENTS = process.env.ENABLE_TORRENTS === 'true';
 const PORT = process.env.PORT || 3000;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-not-for-production';
 const STATIC_DIR = ENABLE_TORRENTS ? 'private' : 'public';
 
-let ROOM_CODE_LENGTH = ENABLE_TORRENTS ? 32 : 6;
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET && NODE_ENV === 'production') {
+    console.error('FATAL: SESSION_SECRET required in production');
+    process.exit(1);
+}
+if (!SESSION_SECRET) {
+    console.warn('WARNING: Using default SESSION_SECRET for development only');
+}
+
+let ROOM_CODE_LENGTH = ENABLE_TORRENTS ? 8 : 6;
 try {
     const configPath = path.join(__dirname, STATIC_DIR, 'js', 'config.js');
     const configContent = fs.readFileSync(configPath, 'utf8');
@@ -32,11 +41,15 @@ try {
     console.warn(`Using default ROOM_CODE_LENGTH: ${ROOM_CODE_LENGTH}`);
 }
 
+const createRoomCodeRegex = (length) => new RegExp(`^[A-Z0-9]{${length}}$`, 'i');
+const ROOM_CODE_PATTERN = /^[A-Z0-9]+$/i;
+
 let ADMIN_USERS = {};
 try {
     ADMIN_USERS = JSON.parse(process.env.ADMIN_USERS || '{}');
 } catch (err) {
-    console.error('ADMIN_USERS parse error:', err.message);
+    console.error('FATAL: Invalid ADMIN_USERS configuration');
+    process.exit(1);
 }
 
 console.log(`ToSync ${ENABLE_TORRENTS ? 'Private' : 'Public'} - Port ${PORT} - Admins: ${Object.keys(ADMIN_USERS).length}`);
@@ -80,17 +93,17 @@ const torrentLimiter = rateLimit({
 app.use(cookieParser());
 app.use(cors({
     origin: ENABLE_TORRENTS
-        ? ['https://app.tosync.org', 'http://localhost:3001']
+        ? ['https://app.tosync.org', 'https://www.app.tosync.org', 'http://localhost:3001']
         : ['https://tosync.org', 'https://www.tosync.org', 'http://localhost:3000'],
     credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '200kb' }));
 app.use('/api/', apiLimiter);
 app.set('trust proxy', 1);
 
 // Create shared session middleware for Express and Socket.IO
 const sessionMiddleware = session({
-    secret: SESSION_SECRET,
+    secret: SESSION_SECRET || 'dev-secret-not-for-production',
     resave: false,
     saveUninitialized: false,
     name: 'tosync.sid',
@@ -144,22 +157,26 @@ if (ENABLE_TORRENTS) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        let valid = false;
-        if (storedPassword.startsWith('$2')) {
-            valid = await bcrypt.compare(password, storedPassword);
-        } else {
-            console.warn(`WARNING: User "${username}" has plaintext password`);
-            valid = password === storedPassword;
+        if (!storedPassword.startsWith('$2b$')) {
+            console.error(`User "${username}" has invalid password format`);
+            return res.status(500).json({ error: 'Invalid server configuration' });
         }
 
+        const valid = await bcrypt.compare(password, storedPassword);
         if (!valid) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        req.session.isAdmin = true;
-        req.session.username = username;
-        console.log(`Admin login: ${username} from ${req.ip}`);
-        res.json({ success: true, username });
+        req.session.regenerate((err) => {
+            if (err) {
+                console.error('Session regeneration failed');
+                return res.status(500).json({ error: 'Login failed' });
+            }
+            req.session.isAdmin = true;
+            req.session.username = username;
+            console.log(`Admin login: ${username} from ${req.ip}`);
+            res.json({ success: true, username });
+        });
     });
 
     app.post('/api/auth/logout', (req, res) => {
@@ -185,6 +202,14 @@ if (!fs.existsSync(roomsDir)) {
 }
 
 function ensureRoomDirectories(roomId) {
+    if (!roomId || !ROOM_CODE_PATTERN.test(roomId)) {
+        throw new Error('Invalid room ID');
+    }
+    const normalizedRoomId = path.basename(roomId);
+    if (normalizedRoomId !== roomId) {
+        throw new Error('Room ID contains invalid characters');
+    }
+
     const roomDir = path.join(roomsDir, roomId);
     const videosDir = path.join(roomDir, 'videos');
     const subtitlesDir = path.join(roomDir, 'subtitles');
@@ -338,8 +363,8 @@ if (ENABLE_TORRENTS) {
             });
 
         } catch (error) {
-            console.error('Torrent error:', error.message);
-            res.status(500).json({ error: error.message });
+            console.error('Torrent operation failed');
+            res.status(500).json({ error: 'Failed to add torrent' });
         }
     });
 
@@ -467,17 +492,33 @@ app.post('/upload', (req, res) => {
     req.setTimeout(60 * 60 * 1000);
     res.setTimeout(60 * 60 * 1000);
 
-    upload.single('video')(req, res, (err) => {
+    upload.single('video')(req, res, async (err) => {
         if (err) {
             console.error('Upload error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
                 return res.status(413).json({ error: 'File too large. Maximum size is 10GB.' });
             }
-            return res.status(500).json({ error: 'Upload failed: ' + err.message });
+            return res.status(500).json({ error: 'Upload failed' });
         }
 
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        try {
+            const buffer = await fs.promises.readFile(req.file.path);
+            const fileType = await fileTypeFromBuffer(buffer.slice(0, 4100));
+
+            if (!fileType || !fileType.mime.startsWith('video/')) {
+                await fs.promises.unlink(req.file.path);
+                return res.status(400).json({ error: 'Invalid file type. Only video files allowed.' });
+            }
+        } catch (error) {
+            console.error('File validation error:', error);
+            if (req.file.path && fs.existsSync(req.file.path)) {
+                await fs.promises.unlink(req.file.path);
+            }
+            return res.status(500).json({ error: 'File validation failed' });
         }
 
         const roomId = req.body.roomId || req.query.roomId;
@@ -498,7 +539,7 @@ app.post('/upload-subtitle', (req, res) => {
     subtitleUpload.single('subtitle')(req, res, (err) => {
         if (err) {
             console.error('Subtitle upload error:', err);
-            return res.status(500).json({ error: 'Upload failed: ' + err.message });
+            return res.status(500).json({ error: 'Subtitle upload failed' });
         }
 
         if (!req.file) {
@@ -700,7 +741,7 @@ io.on('connection', (socket) => {
     socket.on('join-room', (userData) => {
         const { roomId, userName, userRole, isCreator } = userData;
 
-        if (!roomId || roomId.length !== ROOM_CODE_LENGTH) {
+        if (!roomId || roomId.length !== ROOM_CODE_LENGTH || !ROOM_CODE_PATTERN.test(roomId)) {
             socket.emit('error', { message: 'Invalid room code format' });
             return;
         }
@@ -1172,20 +1213,24 @@ app.get('/', (req, res) => {
 app.get('/:roomCode', (req, res) => {
     const roomCode = req.params.roomCode;
 
-    const isValidCode = new RegExp(`^[A-Z0-9]{${ROOM_CODE_LENGTH}}$`, 'i').test(roomCode);
+    if (!ROOM_CODE_PATTERN.test(roomCode)) {
+        return res.redirect('/');
+    }
+
+    const currentRoomCodeRegex = createRoomCodeRegex(ROOM_CODE_LENGTH);
+    const isValidCode = currentRoomCodeRegex.test(roomCode);
 
     if (isValidCode) {
-        // Allow access to room URLs even without login (guests can join)
         return res.sendFile(path.join(__dirname, STATIC_DIR, 'index.html'));
     }
 
-    const isPublicCode = /^[A-Z0-9]{6}$/i.test(roomCode);
-    const isPrivateCode = /^[A-Z0-9]{32}$/i.test(roomCode);
+    const publicRoomCodeRegex = createRoomCodeRegex(6);
+    const privateRoomCodeRegex = createRoomCodeRegex(8);
 
-    if (ENABLE_TORRENTS && isPublicCode) {
+    if (ENABLE_TORRENTS && publicRoomCodeRegex.test(roomCode)) {
         return res.redirect(`https://tosync.org/${roomCode}`);
     }
-    if (!ENABLE_TORRENTS && isPrivateCode) {
+    if (!ENABLE_TORRENTS && privateRoomCodeRegex.test(roomCode)) {
         return res.redirect(`https://app.tosync.org/${roomCode}`);
     }
 

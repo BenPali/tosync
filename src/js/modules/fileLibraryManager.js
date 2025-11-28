@@ -87,7 +87,6 @@ export class FileLibraryManager {
             return;
         }
 
-        console.log('Playing library file:', fileName, 'from:', fileUrl);
 
         // Clear previous event listeners
         state.videoPlayer.onloadedmetadata = null;
@@ -97,7 +96,6 @@ export class FileLibraryManager {
         state.videoPlayer.load();
 
         state.videoPlayer.onloadedmetadata = () => {
-            console.log('Library file loaded successfully');
             uiManager.updateMediaStatus(`Playing: ${fileName}`);
 
             // Broadcast to other users

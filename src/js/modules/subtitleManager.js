@@ -8,26 +8,21 @@ export class SubtitleManager {
     initialize() {
         // Enable subtitle support
         state.videoPlayer.addEventListener('loadedmetadata', () => {
-            console.log('Video metadata loaded, subtitle tracks available:', state.videoPlayer.textTracks.length);
 
             // If there's a selected subtitle, make sure it's enabled
             if (state.selectedSubtitleId && state.selectedSubtitleId !== 'none') {
                 const tracks = Array.from(state.videoPlayer.textTracks);
                 if (tracks.length > 0) {
                     tracks[0].mode = 'showing';
-                    console.log('Subtitle track enabled');
                 }
             }
         });
 
         // Handle subtitle track changes
         state.videoPlayer.addEventListener('loadeddata', () => {
-            console.log('Video data loaded, checking subtitle tracks');
             const tracks = Array.from(state.videoPlayer.textTracks);
-            console.log('Available text tracks:', tracks.length);
 
             tracks.forEach((track, index) => {
-                console.log(`Track ${index}:`, track.kind, track.label, track.language, track.mode);
             });
         });
     }
@@ -74,7 +69,6 @@ export class SubtitleManager {
                         throw new Error(data.error);
                     }
 
-                    console.log('Subtitle uploaded successfully:', data);
 
                     // Broadcast to other users
                     if (state.socket && state.isConnected) {
@@ -122,19 +116,16 @@ export class SubtitleManager {
     selectSubtitle(subtitleId) {
         state.selectedSubtitleId = subtitleId;
 
-        console.log('Selecting subtitle:', subtitleId);
 
         // Remove existing subtitle tracks
         const existingTracks = state.videoPlayer.querySelectorAll('track');
         existingTracks.forEach(track => {
-            console.log('Removing track:', track.label);
             track.remove();
         });
 
         if (subtitleId && subtitleId !== 'none') {
             const subtitle = state.availableSubtitles.find(s => s.filename === subtitleId);
             if (subtitle) {
-                console.log('Loading subtitle:', subtitle.label);
 
                 // Create subtitle track directly - server handles conversion
                 this.createSubtitleTrack(subtitle);
@@ -146,9 +137,7 @@ export class SubtitleManager {
             const tracks = Array.from(state.videoPlayer.textTracks);
             tracks.forEach(track => {
                 track.mode = 'disabled';
-                console.log('Disabled track:', track.label);
             });
-            console.log('All subtitles disabled');
             uiManager.updateLastAction('Subtitles disabled');
         }
 
@@ -164,9 +153,7 @@ export class SubtitleManager {
         // Debug: Log subtitle status
         setTimeout(() => {
             const tracks = Array.from(state.videoPlayer.textTracks);
-            console.log('Current subtitle tracks:', tracks.length);
             tracks.forEach((track, index) => {
-                console.log(`Track ${index}:`, {
                     kind: track.kind,
                     label: track.label,
                     language: track.language,
@@ -180,12 +167,10 @@ export class SubtitleManager {
     // Create subtitle track from content
     createSubtitleTrack(subtitle) {
         try {
-            console.log('Creating subtitle track for:', subtitle.label);
 
             // Remove any existing tracks first
             const existingTracks = state.videoPlayer.querySelectorAll('track');
             existingTracks.forEach(track => {
-                console.log('Removing existing track:', track.label);
                 track.remove();
             });
 
@@ -202,21 +187,16 @@ export class SubtitleManager {
 
             // Enable the track
             track.addEventListener('load', () => {
-                console.log('Subtitle track loaded successfully:', subtitle.label);
 
                 // Wait a bit longer for track to be fully ready
                 setTimeout(() => {
                     const tracks = Array.from(state.videoPlayer.textTracks);
-                    console.log('Available tracks after load:', tracks.length);
 
                     const ourTrack = tracks.find(t => t.label === subtitle.label);
 
                     if (ourTrack) {
                         // Force track to showing mode
                         ourTrack.mode = 'showing';
-                        console.log('Subtitle track enabled, mode:', ourTrack.mode);
-                        console.log('Track readyState:', ourTrack.readyState);
-                        console.log('Track cues:', ourTrack.cues ? ourTrack.cues.length : 'null');
 
                         // If still no cues, try to force a reload
                         if (!ourTrack.cues || ourTrack.cues.length === 0) {
@@ -226,7 +206,6 @@ export class SubtitleManager {
                             fetch(track.src)
                                 .then(res => res.text())
                                 .then(content => {
-                                    console.log('Fetched subtitle content preview:', content.substring(0, 300));
                                 })
                                 .catch(err => console.error('Error fetching subtitle:', err));
                         }
@@ -252,7 +231,6 @@ export class SubtitleManager {
                 uiManager.showError(`Failed to load subtitle: ${subtitle.label}`);
             });
 
-            console.log('Subtitle track element added to video');
 
         } catch (error) {
             console.error('Failed to create subtitle track:', error);
@@ -300,14 +278,12 @@ export class SubtitleManager {
     // Toggle subtitles on/off
     toggleSubtitles() {
         const tracks = Array.from(state.videoPlayer.textTracks);
-        console.log('Toggle subtitles - available tracks:', tracks.length);
 
         if (tracks.length > 0) {
             const currentTrack = tracks.find(track => track.mode === 'showing');
             if (currentTrack) {
                 currentTrack.mode = 'disabled';
                 uiManager.updateLastAction('Subtitles disabled');
-                console.log('Subtitles disabled');
             } else {
                 // Find the first available track or the selected one
                 let trackToEnable = tracks[0];
@@ -320,7 +296,6 @@ export class SubtitleManager {
 
                 trackToEnable.mode = 'showing';
                 uiManager.updateLastAction('Subtitles enabled');
-                console.log('Subtitles enabled:', trackToEnable.label);
 
                 // Check visibility after enabling
                 setTimeout(() => {
@@ -329,7 +304,6 @@ export class SubtitleManager {
             }
         } else {
             uiManager.updateLastAction('No subtitle tracks available');
-            console.log('No subtitle tracks available');
         }
     }
 
@@ -339,19 +313,13 @@ export class SubtitleManager {
         const activeTrack = tracks.find(track => track.mode === 'showing');
 
         if (activeTrack) {
-            console.log('Subtitle track is active:', activeTrack.label);
-            console.log('Track mode:', activeTrack.mode);
-            console.log('Track ready state:', activeTrack.readyState);
 
             if (activeTrack.cues && activeTrack.cues.length > 0) {
-                console.log('Subtitle cues available:', activeTrack.cues.length);
                 uiManager.updateLastAction(`Subtitles active: ${activeTrack.label}`);
             } else {
-                console.log('No subtitle cues available');
                 uiManager.updateLastAction('Subtitles loaded but no cues available');
             }
         } else {
-            console.log('No active subtitle track found');
             uiManager.updateLastAction('No subtitle track active');
         }
     }

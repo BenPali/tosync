@@ -89,10 +89,10 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // Get redirect URL from query params or default to home
                     const urlParams = new URLSearchParams(window.location.search);
                     const redirect = urlParams.get('redirect') || '/';
-                    window.location.href = redirect;
+                    const allowed = /^\/[a-zA-Z0-9]*$/;
+                    window.location.href = allowed.test(redirect) ? redirect : '/';
                 } else {
                     errorMessage.textContent = data.error || 'Invalid credentials';
                     errorMessage.classList.remove('hidden');

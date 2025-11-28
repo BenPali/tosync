@@ -7,11 +7,12 @@ import { videoPlayer, mediaManager, torrentManager, subtitleManager, authManager
 export class SocketManager {
     initializeSocket() {
         state.socket = io({
-            withCredentials: true
+            withCredentials: true,
+            transports: ['websocket'],
+            upgrade: false
         });
 
         state.socket.on('connect', () => {
-            console.log('Connected to server');
             state.isConnected = true;
             uiManager.updateConnectionStatus('Connected to server', 'connected');
 
@@ -24,13 +25,11 @@ export class SocketManager {
         });
 
         state.socket.on('disconnect', () => {
-            console.log('Disconnected from server');
             state.isConnected = false;
             uiManager.updateConnectionStatus('Disconnected from server', 'disconnected');
         });
 
         state.socket.on('room-not-found', () => {
-            console.log('Room not found');
 
             // Check if we came from a direct URL
             const pathParts = window.location.pathname.split('/');
@@ -58,14 +57,12 @@ export class SocketManager {
         });
 
         state.socket.on('room-state', (data) => {
-            console.log('Received room state:', data);
             uiManager.updateRoomStatus(`Connected to room ${state.currentRoomId}`);
             uiManager.updateUsersList(data.users);
 
             // Check if our role was changed by the server (auto-promotion)
             const ourUser = data.users.find(user => user.id === state.socket.id);
             if (ourUser && ourUser.role !== state.userRole) {
-                console.log(`Role updated by server: ${state.userRole} -> ${ourUser.role}`);
                 state.userRole = ourUser.role;
                 authManager.updateUIForRole(ourUser.role, state.userName);
             }
@@ -80,7 +77,6 @@ export class SocketManager {
             }
 
             if (data.currentMedia) {
-                console.log('Restoring media state:', data.currentMedia);
 
                 if (data.currentMedia.type === 'file') {
                     mediaManager.restoreFileMedia(data.currentMedia, data.videoState);
@@ -114,11 +110,9 @@ export class SocketManager {
 
         // Enhanced user-left handler that supports admin succession
         state.socket.on('user-left', (data) => {
-            console.log('User left event:', data);
 
             // Check if this event indicates admin succession
             if (data.adminChanged && data.newAdminId === state.socket?.id) {
-                console.log('Current user promoted to admin due to admin departure');
                 authManager.handleUserLeft(data);
             } else {
                 // Regular user departure
@@ -146,46 +140,38 @@ export class SocketManager {
 
         // Subtitle-related events
         state.socket.on('subtitle-added', (data) => {
-            console.log('Subtitle added:', data.subtitle);
             state.availableSubtitles.push(data.subtitle);
             subtitleManager.updateSubtitlesList();
             uiManager.updateLastAction(`${data.user} added subtitle: ${data.subtitle.label}`);
         });
 
         state.socket.on('subtitle-selected', (data) => {
-            console.log('Subtitle selected:', data.subtitleId);
             uiManager.updateLastAction(`${data.user} selected subtitle`);
         });
 
         // Enhanced admin transfer events with better logging
         state.socket.on('admin-transferred', (data) => {
-            console.log('Admin transferred event received:', data);
             authManager.handleAdminTransferred(data);
         });
 
         state.socket.on('transfer-admin-error', (data) => {
-            console.log('Admin transfer error:', data.message);
             uiManager.showError(data.message);
         });
 
         // User kick events
         state.socket.on('user-kicked', (data) => {
-            console.log('User kicked event:', data);
             authManager.handleUserKicked(data);
         });
 
         state.socket.on('kick-user-error', (data) => {
-            console.log('Kick user error:', data.message);
             uiManager.showError(data.message);
         });
 
         // Connection health monitoring
         state.socket.on('ping', () => {
-            console.log('Ping received from server');
         });
 
         state.socket.on('pong', (latency) => {
-            console.log(`Pong received, latency: ${latency}ms`);
         });
 
         // Enhanced error handling
@@ -195,7 +181,6 @@ export class SocketManager {
         });
 
         state.socket.on('reconnect', (attemptNumber) => {
-            console.log(`Reconnected after ${attemptNumber} attempts`);
             uiManager.updateConnectionStatus('Reconnected to server', 'connected');
         });
 
@@ -221,7 +206,6 @@ export class SocketManager {
         }
         state.lastSyncTime = now;
 
-        console.log(`Broadcasting video action: ${action} at ${time}s (rate: ${playbackRate})`);
 
         state.socket.emit('video-action', {
             action: action,
@@ -240,7 +224,6 @@ export class SocketManager {
         // Prevent duplicate actions within a short time window
         if (state.lastMediaAction && state.lastMediaAction.key === actionKey &&
             Date.now() - state.lastMediaAction.timestamp < 2000) {
-            console.log('Preventing duplicate media action:', action);
             return;
         }
 
@@ -251,7 +234,6 @@ export class SocketManager {
             timestamp: Date.now()
         };
 
-        console.log('Broadcasting media action:', action);
         state.socket.emit('media-action', {
             action: action,
             mediaData: mediaData
@@ -266,7 +248,6 @@ export class SocketManager {
         setInterval(() => {
             if (state.socket.connected && state.isConnected) {
                 // Connection is healthy
-                console.log('Connection health check: OK');
             } else if (!state.socket.connected && state.isConnected) {
                 // Connection lost but state not updated
                 console.warn('Connection health check: LOST');
@@ -279,7 +260,6 @@ export class SocketManager {
     // Gracefully disconnect
     disconnect() {
         if (state.socket) {
-            console.log('Gracefully disconnecting from server');
             state.socket.disconnect();
             state.socket = null;
             state.isConnected = false;
@@ -289,7 +269,6 @@ export class SocketManager {
     // Force reconnection
     reconnect() {
         if (state.socket) {
-            console.log('Forcing reconnection to server');
             state.socket.connect();
         }
     }

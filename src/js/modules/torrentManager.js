@@ -25,7 +25,6 @@ export class TorrentManager {
         }
 
         uiManager.updateMediaStatus('🧲 Processing magnet link...');
-        console.log('Loading torrent:', torrentInput);
 
         try {
             const response = await fetch('/api/torrents/add', {
@@ -45,7 +44,6 @@ export class TorrentManager {
             }
 
             const torrentData = await response.json();
-            console.log('Torrent added:', torrentData);
 
             state.currentTorrentInfo = torrentData;
 
@@ -83,7 +81,6 @@ export class TorrentManager {
         }
 
         const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream`;
-        console.log('Playing torrent file:', fileName, 'from:', streamUrl);
 
         // Clear previous event listeners to prevent multiple calls
         state.videoPlayer.onloadedmetadata = null;
@@ -93,7 +90,6 @@ export class TorrentManager {
         state.videoPlayer.load();
 
         state.videoPlayer.onloadedmetadata = () => {
-            console.log('Torrent video loaded successfully');
             uiManager.updateMediaStatus(`Streaming: ${fileName}`);
 
             // Broadcast to other users
@@ -211,7 +207,6 @@ export class TorrentManager {
 
     // Restore torrent media for late-joining users
     restoreTorrentMedia(mediaData, videoState) {
-        console.log('Restoring torrent media:', mediaData);
         state.currentTorrentInfo = mediaData.data;
 
         if (state.currentTorrentInfo.streamUrl) {
@@ -224,7 +219,6 @@ export class TorrentManager {
             state.videoPlayer.playbackRate = videoState.playbackRate || 1;
 
             state.videoPlayer.onloadedmetadata = () => {
-                console.log('Restored torrent video loaded');
                 uiManager.updateMediaStatus(`Watching: ${state.currentTorrentInfo.name}`);
 
                 if (videoState.isPlaying) {
