@@ -12,8 +12,8 @@ COPY server.js ./
 COPY build.js ./
 COPY generate-hash.js ./
 COPY src ./src
-COPY public ./public
-COPY private ./private
+
+RUN node build.js
 
 RUN mkdir -p rooms
 
