@@ -44,7 +44,7 @@
             </p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
                 <div class="form-group">
-                    <input type="text" id="guestRoomCode" placeholder="Enter 32-character room code" maxlength="32"
+                    <input type="text" id="guestRoomCode" placeholder="Enter {{ROOM_CODE_LENGTH}}-character room code" maxlength="{{ROOM_CODE_LENGTH}}"
                            style="text-transform: uppercase; font-family: monospace; font-size: 0.9rem; padding: 12px;">
                 </div>
                 <button class="btn secondary" id="guestJoinBtn" style="padding: 12px;">
@@ -151,14 +151,14 @@
 
             guestError.classList.add('hidden');
 
-            if (roomCode.length !== 32) {
-                guestError.textContent = 'Please enter a valid 32-character room code';
+            if (roomCode.length !== {{ROOM_CODE_LENGTH}}) {
+                guestError.textContent = 'Please enter a valid {{ROOM_CODE_LENGTH}}-character room code';
                 guestError.classList.remove('hidden');
                 return;
             }
 
             // Validate format (alphanumeric)
-            if (!/^[A-Z0-9]{32}$/.test(roomCode)) {
+            if (!/^[A-Z0-9]{{{ROOM_CODE_LENGTH}}}$/.test(roomCode)) {
                 guestError.textContent = 'Room code must contain only letters and numbers';
                 guestError.classList.remove('hidden');
                 return;

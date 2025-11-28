@@ -21,7 +21,16 @@ const ENABLE_TORRENTS = process.env.ENABLE_TORRENTS === 'true';
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-not-for-production';
 const STATIC_DIR = ENABLE_TORRENTS ? 'private' : 'public';
-const ROOM_CODE_LENGTH = ENABLE_TORRENTS ? 32 : 6;
+
+let ROOM_CODE_LENGTH = ENABLE_TORRENTS ? 32 : 6;
+try {
+    const configPath = path.join(__dirname, STATIC_DIR, 'js', 'config.js');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const match = configContent.match(/ROOM_CODE_LENGTH:\s*(\d+)/);
+    if (match) ROOM_CODE_LENGTH = parseInt(match[1], 10);
+} catch (err) {
+    console.warn(`Using default ROOM_CODE_LENGTH: ${ROOM_CODE_LENGTH}`);
+}
 
 let ADMIN_USERS = {};
 try {
@@ -258,20 +267,27 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const existingTorrent = torrentClient.get(magnetLink);
+            let existingTorrent = torrentClient.get(magnetLink);
+
             if (existingTorrent) {
-                if (!existingTorrent.ready) {
-                    await new Promise(resolve => existingTorrent.once('ready', resolve));
+                if (Array.isArray(existingTorrent)) {
+                    existingTorrent = existingTorrent[0];
                 }
-                return res.json({
-                    infoHash: existingTorrent.infoHash,
-                    name: existingTorrent.name || 'Unknown',
-                    files: existingTorrent.files.map((f, i) => ({
-                        name: f.name,
-                        length: f.length,
-                        index: i
-                    }))
-                });
+
+                if (existingTorrent && typeof existingTorrent.once === 'function') {
+                    if (!existingTorrent.ready) {
+                        await new Promise(resolve => existingTorrent.once('ready', resolve));
+                    }
+                    return res.json({
+                        infoHash: existingTorrent.infoHash,
+                        name: existingTorrent.name || 'Unknown',
+                        files: existingTorrent.files.map((f, i) => ({
+                            name: f.name,
+                            length: f.length,
+                            index: i
+                        }))
+                    });
+                }
             }
 
             const { videosDir } = ensureRoomDirectories(roomId);

@@ -6,35 +6,44 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-console.log('🔨 ToSync Build Script v2.1\n');
+console.log('ToSync Build Script\n');
 
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
-        console.log(`  📁 Created: ${dir}`);
+        console.log(`Created: ${dir}`);
     }
 }
 
-function copyFile(src, dest, label = '') {
+function copyFile(src, dest, label = '', replacements = {}) {
     if (!fs.existsSync(src)) {
-        console.log(`  ⚠️  Missing: ${src}`);
+        console.log(`  ! Missing: ${src}`);
         return false;
     }
-    fs.copyFileSync(src, dest);
-    console.log(`  ✓ ${label || path.basename(src)}`);
+
+    let content = fs.readFileSync(src, 'utf8');
+
+    // Replace placeholders
+    for (const [key, value] of Object.entries(replacements)) {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        content = content.replace(regex, value);
+    }
+
+    fs.writeFileSync(dest, content);
+    console.log(`  ✓  ${label || path.basename(src)}`);
     return true;
 }
 
 function copyDir(src, dest, exclude = []) {
     if (!fs.existsSync(src)) {
-        console.log(`  ⚠️  Missing directory: ${src}`);
+        console.log(`  ! Missing directory: ${src}`);
         return;
     }
     ensureDir(dest);
     const files = fs.readdirSync(src);
     files.forEach(file => {
         if (exclude.includes(file)) {
-            console.log(`  ⊘ Excluded: ${file}`);
+            console.log(`  X  Excluded: ${file}`);
             return;
         }
         const srcPath = path.join(src, file);
@@ -49,15 +58,22 @@ function copyDir(src, dest, exclude = []) {
 
 function buildPublic() {
     console.log('═══════════════════════════════════════');
-    console.log('  Building PUBLIC (tosync.org)');
+    console.log('  Building PUBLIC');
     console.log('═══════════════════════════════════════\n');
 
     const dest = 'public';
+
+    // Read ROOM_CODE_LENGTH from config
+    const configContent = fs.readFileSync('src/js/config.public.js', 'utf8');
+    const roomCodeLengthMatch = configContent.match(/ROOM_CODE_LENGTH:\s*(\d+)/);
+    const roomCodeLength = roomCodeLengthMatch ? roomCodeLengthMatch[1] : '6';
+    const replacements = { ROOM_CODE_LENGTH: roomCodeLength };
+
     ensureDir(dest);
     ensureDir(path.join(dest, 'js'));
     ensureDir(path.join(dest, 'js', 'modules'));
 
-    copyFile('src/index.public.html', path.join(dest, 'index.html'), 'index.html');
+    copyFile('src/index.public.html', path.join(dest, 'index.html'), 'index.html', replacements);
     copyFile('src/styles.css', path.join(dest, 'styles.css'));
     copyFile('src/js/config.public.js', path.join(dest, 'js', 'config.js'), 'config.js');
     copyFile('src/js/state.js', path.join(dest, 'js', 'state.js'));
@@ -71,16 +87,23 @@ function buildPublic() {
 
 function buildPrivate() {
     console.log('═══════════════════════════════════════');
-    console.log('  Building PRIVATE (app.tosync.org)');
+    console.log('  Building PRIVATE');
     console.log('═══════════════════════════════════════\n');
 
     const dest = 'private';
+
+    // Read ROOM_CODE_LENGTH from config
+    const configContent = fs.readFileSync('src/js/config.private.js', 'utf8');
+    const roomCodeLengthMatch = configContent.match(/ROOM_CODE_LENGTH:\s*(\d+)/);
+    const roomCodeLength = roomCodeLengthMatch ? roomCodeLengthMatch[1] : '32';
+    const replacements = { ROOM_CODE_LENGTH: roomCodeLength };
+
     ensureDir(dest);
     ensureDir(path.join(dest, 'js'));
     ensureDir(path.join(dest, 'js', 'modules'));
 
-    copyFile('src/index.private.html', path.join(dest, 'index.html'), 'index.html');
-    copyFile('src/login.html', path.join(dest, 'login.html'), 'login.html');
+    copyFile('src/index.private.html', path.join(dest, 'index.html'), 'index.html', replacements);
+    copyFile('src/login.html', path.join(dest, 'login.html'), 'login.html', replacements);
     copyFile('src/styles.css', path.join(dest, 'styles.css'));
     copyFile('src/js/config.private.js', path.join(dest, 'js', 'config.js'), 'config.js');
     copyFile('src/js/state.js', path.join(dest, 'js', 'state.js'));
@@ -102,10 +125,10 @@ function verify() {
     // Verify torrentManager.js is EXCLUDED from public build
     const publicTorrent = path.join('public', 'js', 'modules', 'torrentManager.js');
     if (fs.existsSync(publicTorrent)) {
-        console.log('  ❌ PUBLIC has torrentManager.js (should be excluded)');
+        console.log('  ❌ PUBLIC has torrentManager.js');
         passed = false;
     } else {
-        console.log('  ✓ PUBLIC excludes torrentManager.js');
+        console.log('  ✓ PUBLIC is clean');
     }
 
     const privateTorrent = path.join('private', 'js', 'modules', 'torrentManager.js');
@@ -114,13 +137,6 @@ function verify() {
         passed = false;
     } else {
         console.log('  ✓ PRIVATE includes torrentManager.js');
-    }
-
-    const mainJs = fs.readFileSync(path.join('public', 'js', 'main.js'), 'utf8');
-    if (mainJs.includes('config.ENABLE_TORRENTS')) {
-        console.log('  ✓ main.js has conditional torrent loading');
-    } else {
-        console.log('  ⚠️  main.js missing conditional torrent logic');
     }
 
     // Verify public HTML has no torrent UI
