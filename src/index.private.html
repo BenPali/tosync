@@ -200,6 +200,7 @@
                                 <div class="pt-2 space-y-2">
                                     <input type="file" id="subtitleInput" class="text-xs w-full"/>
                                     <input type="text" id="subtitleLanguage" placeholder="Lang" class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary outline-none">
+                                    <input type="text" id="subtitleLabel" placeholder="Label" class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary outline-none">
                                     <button id="uploadSubtitleBtn" class="w-full bg-slate-700 text-white text-xs py-1 rounded">Add</button>
                                 </div>
                             </details>
@@ -228,8 +229,15 @@
         </div>
     </main>
 
-    <footer class="mt-12 py-6 border-t border-white/5 text-center text-xs text-slate-600">
-        <p>ToSync Advanced</p>
+    <footer class="border-t border-white/5 mt-12 py-6 text-center text-xs text-slate-500">
+        <p class="text-slate-400 font-medium">ToSync Advanced <span class="text-slate-600">v3.0.0</span></p>
+        <p class="mt-1">Watch together, stay connected</p>
+        <div class="flex justify-center gap-4 mt-3">
+            <a href="https://github.com/benpali/tosync" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition">GitHub</a>
+            <a href="https://github.com/benpali/tosync/issues" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition">Issues</a>
+            <a href="https://github.com/benpali/tosync/blob/main/README.md" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition">Docs</a>
+        </div>
+        <p class="mt-3 text-slate-600">Built with ❤️ by Ben Pali &copy; 2025</p>
     </footer>
     <script type="module" src="js/main.js"></script>
 </body>
