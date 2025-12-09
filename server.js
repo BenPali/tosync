@@ -13,6 +13,7 @@ import cookieParser from 'cookie-parser';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { fileTypeFromBuffer } from 'file-type';
+import dns from 'dns';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -153,7 +154,7 @@ if (ENABLE_TORRENTS) {
         if (!storedPassword) {
             try {
                 await bcrypt.compare(password, '$2b$12$LQv3c1yqBwEHpNxVfLnQKOQMZpz1WxIzyMJtf3Fuz7RB.Iy3GnAkO');
-            } catch {}
+            } catch { }
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -235,7 +236,8 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const isSubtitle = file.mimetype === 'application/x-subrip';
-        cb(null, isSubtitle ? 'subtitle.srt' : file.originalname);
+        const uniquePrefix = Date.now() + '-';
+        cb(null, isSubtitle ? uniquePrefix + 'subtitle.srt' : uniquePrefix + file.originalname);
     }
 });
 
@@ -476,10 +478,38 @@ if (ENABLE_TORRENTS) {
             return res.status(400).json({ error: 'Missing stream URL' });
         }
 
+        let urlObj;
         try {
-            new URL(streamUrl);
+            urlObj = new URL(streamUrl);
+            if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                return res.status(400).json({ error: 'Invalid protocol' });
+            }
         } catch {
             return res.status(400).json({ error: 'Invalid URL' });
+        }
+
+        try {
+            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true });
+
+            for (const address of lookup) {
+                const ip = address.address;
+                if (
+                    ip.startsWith('127.') ||
+                    ip.startsWith('10.') ||
+                    ip === '::1' ||
+                    (ip.startsWith('192.168.')) ||
+                    (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31) ||
+                    ip.startsWith('fc') ||
+                    ip.startsWith('fe80')
+                ) {
+                    console.warn(`Blocked SSRF attempt to ${ip} (${streamUrl})`);
+                    return res.status(403).json({ error: 'Destination not allowed' });
+                }
+            }
+        } catch (err) {
+            if (err.code !== 'ENOTFOUND') {
+                return res.status(400).json({ error: 'Host resolution failed' });
+            }
         }
 
         try {
@@ -504,7 +534,6 @@ if (ENABLE_TORRENTS) {
                 res.setHeader('Content-Type', contentType);
             }
 
-            res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Cache-Control', 'no-cache');
 
             const reader = response.body.getReader();
@@ -814,20 +843,34 @@ io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
 
     socket.on('join-room', (userData) => {
-        const { roomId, userName, userRole, isCreator } = userData;
+        const { roomId, userName, isCreator } = userData;
+        const session = socket.request.session;
 
         if (!roomId || roomId.length !== ROOM_CODE_LENGTH || !ROOM_CODE_PATTERN.test(roomId)) {
             socket.emit('error', { message: 'Invalid room code format' });
             return;
         }
 
-        // Check if user is authenticated when trying to create a room on private site
-        if (ENABLE_TORRENTS && isCreator && userRole === 'admin') {
-            const session = socket.request.session;
-            if (!session || !session.isAdmin) {
+        let finalRole = 'guest';
+
+        if (ENABLE_TORRENTS) {
+            if (session && session.isAdmin) {
+                finalRole = 'admin';
+            }
+
+            if (isCreator && finalRole !== 'admin') {
                 socket.emit('error', { message: 'Authentication required to create rooms' });
                 console.log(`Unauthorized room creation attempt: ${socket.id}`);
                 return;
+            }
+        } else {
+            if (!rooms.has(roomId)) {
+                finalRole = 'admin';
+            } else {
+                const room = rooms.get(roomId);
+                if (!room.adminId && room.users.size === 0) {
+                    finalRole = 'admin';
+                }
             }
         }
 
@@ -835,27 +878,31 @@ io.on('connection', (socket) => {
         socket.emit('socket-registered', { socketId: socket.id });
 
         if (!rooms.has(roomId)) {
-            if (isCreator && userRole === 'admin') {
-                rooms.set(roomId, {
-                    id: roomId,
-                    users: new Map(),
-                    currentMedia: null,
-                    videoState: {
-                        isPlaying: false,
-                        currentTime: 0,
-                        playbackRate: 1
-                    },
-                    adminId: null,
-                    currentTorrent: null,
-                    subtitles: [],
-                    createdAt: Date.now(),
-                    lastActivity: Date.now()
-                });
-                console.log(`Room created: ${roomId} by ${userName}`);
-            } else {
-                socket.emit('room-not-found');
-                return;
+            if (finalRole !== 'admin') {
+                if (!ENABLE_TORRENTS) {
+                    finalRole = 'admin';
+                } else {
+                    socket.emit('room-not-found');
+                    return;
+                }
             }
+
+            rooms.set(roomId, {
+                id: roomId,
+                users: new Map(),
+                currentMedia: null,
+                videoState: {
+                    isPlaying: false,
+                    currentTime: 0,
+                    playbackRate: 1
+                },
+                adminId: null,
+                currentTorrent: null,
+                subtitles: [],
+                createdAt: Date.now(),
+                lastActivity: Date.now()
+            });
+            console.log(`Room created: ${roomId} by ${userName}`);
         }
 
         const room = rooms.get(roomId);
@@ -864,7 +911,7 @@ io.on('connection', (socket) => {
             const oldUser = users.get(socket.id);
             if (oldUser.room && oldUser.room !== roomId && rooms.has(oldUser.room)) {
                 const oldRoom = rooms.get(oldUser.room);
-                oldRoom.users.delete(socket.id);
+                if (oldRoom) oldRoom.users.delete(socket.id);
             }
             if (room.users.has(socket.id)) {
                 room.users.delete(socket.id);
@@ -875,10 +922,8 @@ io.on('connection', (socket) => {
         socket.join(roomId);
 
         const uniqueName = generateUniqueName(userName, room.users, socket.id);
-        let finalRole = userRole;
 
-        if (!room.adminId && room.users.size === 0 && userRole === 'guest') {
-            console.log(`Auto-promoting ${uniqueName} to admin in empty room ${roomId}`);
+        if (!room.adminId && room.users.size === 0) {
             finalRole = 'admin';
         }
 
@@ -894,8 +939,10 @@ io.on('connection', (socket) => {
         room.users.set(socket.id, user);
         room.lastActivity = Date.now();
 
-        if (finalRole === 'admin' && (!room.adminId || isCreator)) {
-            room.adminId = socket.id;
+        const sessionAdmin = ENABLE_TORRENTS ? (session && session.isAdmin) : true;
+
+        if (finalRole === 'admin' && (!room.adminId || sessionAdmin)) {
+            if (!room.adminId) room.adminId = socket.id;
         }
 
         console.log(`${user.name} (${finalRole}) joined room: ${roomId}`);
@@ -1231,7 +1278,7 @@ io.on('connection', (socket) => {
     });
 });
 
-function cleanupInactiveRooms() {
+async function cleanupInactiveRooms() {
     const now = Date.now();
     const roomsToDelete = [];
 
@@ -1241,10 +1288,10 @@ function cleanupInactiveRooms() {
         }
     });
 
-    roomsToDelete.forEach(roomId => {
+    for (const roomId of roomsToDelete) {
         const room = rooms.get(roomId);
 
-        if (room.currentTorrent) {
+        if (room.currentTorrent && room.currentTorrent.destroy && typeof room.currentTorrent.destroy === 'function') {
             let torrentUsedElsewhere = false;
             rooms.forEach((otherRoom, otherRoomId) => {
                 if (otherRoomId !== roomId && otherRoom.currentTorrent === room.currentTorrent) {
@@ -1253,31 +1300,33 @@ function cleanupInactiveRooms() {
             });
 
             if (!torrentUsedElsewhere) {
-                room.currentTorrent.destroy({ destroyStore: true });
+                try {
+                    room.currentTorrent.destroy({ destroyStore: false });
+                    console.log(`Destroyed torrent for room ${roomId}`);
+                } catch (err) {
+                    console.error(`Error destroying torrent for room ${roomId}:`, err);
+                }
             }
         }
 
         const roomDir = path.join(roomsDir, roomId);
         if (fs.existsSync(roomDir)) {
-            fs.rm(roomDir, { recursive: true, force: true }, (err) => {
-                if (err) {
-                    console.error(`Error deleting room directory ${roomId}:`, err);
-                } else {
-                    console.log(`Deleted room directory: ${roomId}`);
-                }
-            });
+            try {
+                await fs.promises.rm(roomDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+                console.log(`Deleted room directory: ${roomId}`);
+            } catch (err) {
+                console.error(`Error deleting room directory ${roomId}:`, err.message);
+            }
         }
 
         rooms.delete(roomId);
         console.log(`Cleaned up inactive room: ${roomId}`);
-    });
+    }
 }
 
 setInterval(cleanupInactiveRooms, ROOM_CLEANUP_INTERVAL);
 
-// Root route - MUST come before /:roomCode
 app.get('/', (req, res) => {
-    // On private instance, redirect to login if not authenticated
     if (ENABLE_TORRENTS && !req.session?.isAdmin) {
         return res.redirect(302, '/login');
     }
@@ -1328,9 +1377,14 @@ app.get('/api/library/:roomId', (req, res) => {
                 if (stats.isFile()) {
                     const ext = path.extname(filename).toLowerCase();
                     if (['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v'].includes(ext)) {
+                        const parts = filename.split('-');
+                        const displayName = parts.length > 1 && /^\d+$/.test(parts[0])
+                            ? parts.slice(1).join('-')
+                            : filename;
+
                         library.uploads.push({
                             filename: filename,
-                            originalName: filename,
+                            originalName: displayName,
                             size: stats.size,
                             url: `/rooms/${roomId}/videos/${filename}`,
                             type: 'video',

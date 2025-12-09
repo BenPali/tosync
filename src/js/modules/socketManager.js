@@ -19,7 +19,6 @@ export class SocketManager {
             state.socket.emit('join-room', {
                 roomId: state.currentRoomId,
                 userName: state.userName,
-                userRole: state.userRole,
                 isCreator: state.isRoomCreator
             });
         });
