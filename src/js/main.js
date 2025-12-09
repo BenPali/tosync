@@ -142,8 +142,11 @@ function setupUIEventListeners() {
     addListener('rate1Btn', () => videoPlayer.setPlaybackRate(1));
     addListener('rate15Btn', () => videoPlayer.setPlaybackRate(1.5));
 
-    if (config.ENABLE_TORRENTS && torrentManager) {
-        addListener('loadTorrentBtn', () => torrentManager.loadTorrent());
+    if (config.ENABLE_TORRENTS) {
+        if (torrentManager) {
+            addListener('loadTorrentBtn', () => torrentManager.loadTorrent());
+        }
+        addListener('loadStreamBtn', () => mediaManager.loadStream());
     }
 
     const roomInput = document.getElementById('roomCodeInput');

@@ -22,6 +22,8 @@ export const state = {
     currentTorrentInfo: null,
     torrentProgressInterval: null,
     lastMediaAction: null,
+    hlsInstance: null,
+    mpegtsPlayer: null,
 
     // Subtitles
     availableSubtitles: [],

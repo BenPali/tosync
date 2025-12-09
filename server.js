@@ -469,6 +469,81 @@ if (ENABLE_TORRENTS) {
         }
     });
 
+    app.get('/api/stream/proxy', requireAdmin, async (req, res) => {
+        const streamUrl = req.query.url;
+
+        if (!streamUrl) {
+            return res.status(400).json({ error: 'Missing stream URL' });
+        }
+
+        try {
+            new URL(streamUrl);
+        } catch {
+            return res.status(400).json({ error: 'Invalid URL' });
+        }
+
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(streamUrl, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (contentType) {
+                res.setHeader('Content-Type', contentType);
+            }
+
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Cache-Control', 'no-cache');
+
+            const reader = response.body.getReader();
+
+            req.on('close', () => {
+                reader.cancel();
+            });
+
+            const pump = async () => {
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        if (!res.writableEnded) {
+                            res.write(Buffer.from(value));
+                        }
+                    }
+                    if (!res.writableEnded) {
+                        res.end();
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error('Stream proxy error:', err.message);
+                    }
+                    if (!res.writableEnded) {
+                        res.end();
+                    }
+                }
+            };
+
+            pump();
+        } catch (err) {
+            console.error('Stream proxy fetch error:', err.message);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Failed to connect to stream' });
+            }
+        }
+    });
+
     setInterval(() => {
         const now = Date.now();
         const maxAge = 3 * 60 * 60 * 1000;

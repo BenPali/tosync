@@ -299,6 +299,21 @@ export class RoomManager {
             state.socket = null;
         }
 
+        if (state.videoPlayer) {
+            state.videoPlayer.pause();
+            state.videoPlayer.src = '';
+        }
+
+        if (state.hlsInstance) {
+            state.hlsInstance.destroy();
+            state.hlsInstance = null;
+        }
+
+        if (state.mpegtsPlayer) {
+            state.mpegtsPlayer.destroy();
+            state.mpegtsPlayer = null;
+        }
+
         state.currentRoomId = null;
         state.isRoomCreator = false;
         state.currentTorrentInfo = null;
