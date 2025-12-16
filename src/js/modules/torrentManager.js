@@ -30,6 +30,7 @@ export class TorrentManager {
             const response = await fetch('/api/torrents/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ magnetLink: magnet, roomId: state.currentRoomId })
             });
 
@@ -151,7 +152,7 @@ export class TorrentManager {
 
         const updateProgress = async () => {
             try {
-                const response = await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/status`);
+                const response = await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/status`, { credentials: 'include' });
                 if (!response.ok) return;
 
                 const status = await response.json();

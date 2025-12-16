@@ -23,6 +23,9 @@ const ENABLE_TORRENTS = process.env.ENABLE_TORRENTS === 'true';
 const PORT = process.env.PORT || 3000;
 const STATIC_DIR = ENABLE_TORRENTS ? 'private' : 'public';
 
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+const VERSION = pkg.version;
+
 const SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET && NODE_ENV === 'production') {
     console.error('FATAL: SESSION_SECRET required in production');
@@ -101,6 +104,30 @@ app.use(cors({
 app.use(express.json({ limit: '200kb' }));
 app.use('/api/', apiLimiter);
 app.set('trust proxy', 1);
+
+const CSP_POLICY = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.socket.io https://cdn.jsdelivr.net https://cdn.tailwindcss.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "connect-src 'self' ws: wss: https://cdn.jsdelivr.net https://cdn.socket.io",
+    "media-src 'self' blob:",
+    "frame-src 'self'",
+    "worker-src 'self' blob:"
+].join('; ');
+
+app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy', CSP_POLICY);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (NODE_ENV === 'production') {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+
+    next();
+});
 
 // Create shared session middleware for Express and Socket.IO
 const sessionMiddleware = session({
@@ -471,11 +498,222 @@ if (ENABLE_TORRENTS) {
         }
     });
 
-    app.get('/api/stream/proxy', requireAdmin, async (req, res) => {
+    const isPrivateIP = (ip) => {
+        if (/^127\./.test(ip)) return true;
+        if (/^10\./.test(ip)) return true;
+        if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip)) return true;
+        if (/^192\.168\./.test(ip)) return true;
+        if (ip === '0.0.0.0' || ip === '255.255.255.255') return true;
+
+        if (ip === '::1' || ip === '::') return true;
+        if (/^fe80:/i.test(ip)) return true;
+        if (/^f[cd][0-9a-f]{2}:/i.test(ip)) return true;
+        if (/^::ffff:127\./i.test(ip)) return true;
+        if (/^::ffff:10\./i.test(ip)) return true;
+        if (/^::ffff:172\.(1[6-9]|2[0-9]|3[01])\./i.test(ip)) return true;
+        if (/^::ffff:192\.168\./i.test(ip)) return true;
+
+        return false;
+    };
+
+    app.post('/api/stream/start', requireAdmin, async (req, res) => {
+        const { streamUrl, roomId } = req.body;
+
+        if (!streamUrl || !roomId) {
+            return res.status(400).json({ error: 'Missing streamUrl or roomId' });
+        }
+
+        let urlObj;
+        try {
+            urlObj = new URL(streamUrl);
+            if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                return res.status(400).json({ error: 'Invalid protocol' });
+            }
+        } catch {
+            return res.status(400).json({ error: 'Invalid URL' });
+        }
+
+        if (activeStreams.has(roomId)) {
+            const existingStream = activeStreams.get(roomId);
+            existingStream.controller.abort();
+            activeStreams.delete(roomId);
+        }
+
+        try {
+            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true, verbatim: true });
+
+            for (const address of lookup) {
+                if (isPrivateIP(address.address)) {
+                    console.warn(`Blocked SSRF attempt to ${address.address}`);
+                    return res.status(403).json({ error: 'Destination not allowed' });
+                }
+            }
+
+            const targetIp = lookup[0].address;
+            const targetUrl = new URL(streamUrl);
+
+            if (lookup[0].family === 6) {
+                targetUrl.hostname = `[${targetIp}]`;
+            } else {
+                targetUrl.hostname = targetIp;
+            }
+
+            const controller = new AbortController();
+
+            const response = await fetch(targetUrl.toString(), {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
+                    'Host': urlObj.hostname
+                }
+            });
+
+            if (!response.ok) {
+                return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
+            }
+
+            const contentType = response.headers.get('content-type') || 'video/mp2t';
+
+            const streamInfo = {
+                streamUrl: streamUrl,
+                controller: controller,
+                contentType: contentType,
+                clients: new Map(),
+                startedAt: Date.now(),
+                isActive: true
+            };
+
+            activeStreams.set(roomId, streamInfo);
+
+            const pumpSource = async () => {
+                try {
+                    const reader = response.body.getReader();
+
+                    while (streamInfo.isActive) {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            console.log(`Stream source ended for room ${roomId}`);
+                            break;
+                        }
+
+                        for (const [clientId, clientRes] of streamInfo.clients) {
+                            try {
+                                if (!clientRes.writableEnded) {
+                                    clientRes.write(Buffer.from(value));
+                                }
+                            } catch (e) {
+                                streamInfo.clients.delete(clientId);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error(`Stream source error for room ${roomId}:`, err.message);
+                    }
+                } finally {
+                    streamInfo.isActive = false;
+                    for (const [clientId, clientRes] of streamInfo.clients) {
+                        try {
+                            if (!clientRes.writableEnded) clientRes.end();
+                        } catch (e) { }
+                    }
+                    activeStreams.delete(roomId);
+                    console.log(`Stream relay ended for room ${roomId}`);
+                }
+            };
+
+            pumpSource();
+
+            console.log(`Stream relay started for room ${roomId}: ${urlObj.hostname}`);
+
+            res.json({
+                success: true,
+                relayUrl: `/api/stream/relay/${roomId}`,
+                streamUrl: streamUrl
+            });
+
+        } catch (err) {
+            const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
+            console.error(`Stream start failed: ${err.message}${causeMsg}`);
+            res.status(500).json({ error: `Failed to connect: ${err.message}${causeMsg}` });
+        }
+    });
+
+    app.get('/api/stream/relay/:roomId', (req, res) => {
+        const { roomId } = req.params;
+        const viewerSocketId = req.query.socketId || req.headers['x-socket-id'];
+
+        const isAdmin = req.session && req.session.isAdmin;
+        let isRoomMember = false;
+
+        if (viewerSocketId) {
+            const memberRoomId = socketRoomMembership.get(viewerSocketId);
+            const io = req.app.get('io');
+            const socket = io?.sockets?.sockets?.get(viewerSocketId);
+            isRoomMember = memberRoomId === roomId && socket?.connected;
+        }
+
+        if (!isAdmin && !isRoomMember) {
+            return res.status(403).json({ error: 'Join the room first' });
+        }
+
+        const streamInfo = activeStreams.get(roomId);
+        if (!streamInfo || !streamInfo.isActive) {
+            return res.status(404).json({ error: 'No active stream for this room' });
+        }
+
+        res.setHeader('Content-Type', streamInfo.contentType);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Transfer-Encoding', 'chunked');
+
+        const clientId = `${Date.now()}-${Math.random()}`;
+        streamInfo.clients.set(clientId, res);
+
+        console.log(`Client ${clientId} connected to stream relay for room ${roomId} (${streamInfo.clients.size} clients)`);
+
+        req.on('close', () => {
+            streamInfo.clients.delete(clientId);
+            console.log(`Client disconnected from stream relay for room ${roomId} (${streamInfo.clients.size} clients remaining)`);
+        });
+    });
+
+    app.delete('/api/stream/stop/:roomId', requireAdmin, (req, res) => {
+        const { roomId } = req.params;
+
+        const streamInfo = activeStreams.get(roomId);
+        if (streamInfo) {
+            streamInfo.isActive = false;
+            streamInfo.controller.abort();
+            activeStreams.delete(roomId);
+            console.log(`Stream relay stopped for room ${roomId}`);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'No active stream for this room' });
+        }
+    });
+
+    app.get('/api/stream/proxy', async (req, res) => {
         const streamUrl = req.query.url;
+        const roomId = req.query.roomId;
 
         if (!streamUrl) {
             return res.status(400).json({ error: 'Missing stream URL' });
+        }
+
+        const isAdmin = req.session && req.session.isAdmin;
+        const viewerSocketId = req.query.socketId || req.headers['x-socket-id'];
+        let isRoomMember = false;
+
+        if (viewerSocketId && roomId) {
+            const memberRoomId = socketRoomMembership.get(viewerSocketId);
+            const io = req.app.get('io');
+            const socket = io?.sockets?.sockets?.get(viewerSocketId);
+            isRoomMember = memberRoomId === roomId && socket?.connected;
+        }
+
+        if (!isAdmin && !isRoomMember) {
+            return res.status(403).json({ error: 'Join the room first' });
         }
 
         let urlObj;
@@ -489,52 +727,60 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true });
+            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true, verbatim: true });
 
             for (const address of lookup) {
-                const ip = address.address;
-                if (
-                    ip.startsWith('127.') ||
-                    ip.startsWith('10.') ||
-                    ip === '::1' ||
-                    (ip.startsWith('192.168.')) ||
-                    (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31) ||
-                    ip.startsWith('fc') ||
-                    ip.startsWith('fe80')
-                ) {
-                    console.warn(`Blocked SSRF attempt to ${ip} (${streamUrl})`);
+                if (isPrivateIP(address.address)) {
+                    console.warn(`Blocked SSRF attempt to ${address.address} (${streamUrl.substring(0, 100)}...)`);
                     return res.status(403).json({ error: 'Destination not allowed' });
                 }
             }
-        } catch (err) {
-            if (err.code !== 'ENOTFOUND') {
-                return res.status(400).json({ error: 'Host resolution failed' });
-            }
-        }
 
-        try {
+            const targetIp = lookup[0].address;
+            const targetUrl = new URL(streamUrl);
+
+            if (lookup[0].family === 6) {
+                targetUrl.hostname = `[${targetIp}]`;
+            } else {
+                targetUrl.hostname = targetIp;
+            }
+
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 30000);
 
-            const response = await fetch(streamUrl, {
+            console.log(`Proxy streaming from: ${urlObj.hostname} (${targetIp})`);
+
+            const response = await fetch(targetUrl.toString(), {
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
+                    'Host': urlObj.hostname
                 }
             });
 
             clearTimeout(timeout);
 
             if (!response.ok) {
+                console.warn(`Upstream returned ${response.status} for ${urlObj.hostname}`);
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
             }
 
-            const contentType = response.headers.get('content-type');
-            if (contentType) {
-                res.setHeader('Content-Type', contentType);
+            const contentType = response.headers.get('content-type') || '';
+            const validTypes = [
+                'video/', 'audio/',
+                'application/x-mpegurl', 'application/vnd.apple.mpegurl',
+                'application/dash+xml', 'application/octet-stream',
+                'text/plain'
+            ];
+
+            if (contentType && !validTypes.some(t => contentType.toLowerCase().startsWith(t))) {
+                console.warn(`Blocked invalid content-type: ${contentType}`);
+                return res.status(400).json({ error: 'Unsupported content type' });
             }
 
+            res.setHeader('Content-Type', contentType || 'video/mp2t');
             res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
 
             const reader = response.body.getReader();
 
@@ -547,6 +793,7 @@ if (ENABLE_TORRENTS) {
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
+
                         if (!res.writableEnded) {
                             res.write(Buffer.from(value));
                         }
@@ -566,9 +813,10 @@ if (ENABLE_TORRENTS) {
 
             pump();
         } catch (err) {
-            console.error('Stream proxy fetch error:', err.message);
+            const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
+            console.error(`Stream proxy failed for ${urlObj?.hostname}: ${err.message}${causeMsg}`);
             if (!res.headersSent) {
-                res.status(500).json({ error: 'Failed to connect to stream' });
+                res.status(500).json({ error: `Failed to connect: ${err.message}${causeMsg}` });
             }
         }
     });
@@ -592,7 +840,10 @@ if (ENABLE_TORRENTS) {
     });
 }
 
-app.post('/upload', (req, res) => {
+// Conditional auth: private instance requires login, public instance allows (room admin is client-side)
+const optionalAdmin = ENABLE_TORRENTS ? requireAdmin : (req, res, next) => next();
+
+app.post('/upload', optionalAdmin, (req, res) => {
     req.setTimeout(60 * 60 * 1000);
     res.setTimeout(60 * 60 * 1000);
 
@@ -610,8 +861,11 @@ app.post('/upload', (req, res) => {
         }
 
         try {
-            const buffer = await fs.promises.readFile(req.file.path);
-            const fileType = await fileTypeFromBuffer(buffer.slice(0, 4100));
+            const fd = await fs.promises.open(req.file.path, 'r');
+            const buffer = Buffer.alloc(4100);
+            await fd.read(buffer, 0, 4100, 0);
+            await fd.close();
+            const fileType = await fileTypeFromBuffer(buffer);
 
             if (!fileType || !fileType.mime.startsWith('video/')) {
                 await fs.promises.unlink(req.file.path);
@@ -639,7 +893,7 @@ app.post('/upload', (req, res) => {
     });
 });
 
-app.post('/upload-subtitle', (req, res) => {
+app.post('/upload-subtitle', optionalAdmin, (req, res) => {
     subtitleUpload.single('subtitle')(req, res, (err) => {
         if (err) {
             console.error('Subtitle upload error:', err);
@@ -775,6 +1029,7 @@ app.set('io', io);
 
 const rooms = new Map();
 const users = new Map();
+const activeStreams = new Map();
 
 const ROOM_INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 const ROOM_CLEANUP_INTERVAL = 60 * 1000;
@@ -1036,6 +1291,14 @@ io.on('connection', (socket) => {
             case 'load-file':
                 room.currentMedia = {
                     type: 'file',
+                    data: mediaData,
+                    loadedBy: user.name,
+                    loadedAt: new Date()
+                };
+                break;
+            case 'load-stream':
+                room.currentMedia = {
+                    type: 'stream',
                     data: mediaData,
                     loadedBy: user.name,
                     loadedAt: new Date()

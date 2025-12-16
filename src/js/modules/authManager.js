@@ -1,7 +1,6 @@
 // modules/authManager.js - Authentication and role management
 
 import { state } from '../state.js';
-import { config } from '../config.js';
 import { socketManager, videoPlayer, torrentManager, uiManager } from '../main.js';
 
 export class AuthManager {

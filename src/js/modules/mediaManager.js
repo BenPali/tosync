@@ -112,7 +112,7 @@ export class MediaManager {
         xhr.send(formData);
     }
 
-    loadStream() {
+    async loadStream() {
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can load streams');
             return;
@@ -131,7 +131,7 @@ export class MediaManager {
             return;
         }
 
-        uiManager.updateMediaStatus('Loading stream...');
+        uiManager.updateMediaStatus('Starting stream relay...');
 
         state.currentTorrentInfo = null;
         if (torrentManager) {
@@ -141,6 +141,11 @@ export class MediaManager {
         if (state.hlsInstance) {
             state.hlsInstance.destroy();
             state.hlsInstance = null;
+        }
+
+        if (state.mpegtsPlayer) {
+            state.mpegtsPlayer.destroy();
+            state.mpegtsPlayer = null;
         }
 
         state.videoPlayer.onloadedmetadata = null;
@@ -153,42 +158,40 @@ export class MediaManager {
             streamName = 'Live Stream';
         }
 
-        const proxyUrl = `${window.location.origin}/api/stream/proxy?url=${encodeURIComponent(streamUrl)}`;
+        try {
+            const response = await fetch('/api/stream/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    streamUrl: streamUrl,
+                    roomId: state.currentRoomId
+                })
+            });
 
-        const onStreamReady = () => {
-            uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
+            if (!response.ok) {
+                const error = await response.json();
+                uiManager.showError(`Failed to start stream: ${error.error || response.status}`);
+                return;
+            }
+
+            const data = await response.json();
+            const socketId = state.socket ? state.socket.id : '';
+            const relayUrl = `${window.location.origin}${data.relayUrl}?socketId=${encodeURIComponent(socketId)}`;
+
             socketManager.broadcastMediaAction('load-stream', {
-                streamUrl: proxyUrl,
-                streamName: streamName
+                streamUrl: streamUrl,
+                streamName: streamName,
+                relayUrl: data.relayUrl
             });
             streamInput.value = '';
-        };
 
-        const isHlsUrl = streamUrl.includes('.m3u8');
+            this.loadStreamDirect(relayUrl, streamName);
+            uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
 
-        if (isHlsUrl && typeof Hls !== 'undefined' && Hls.isSupported()) {
-            const hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true
-            });
-            state.hlsInstance = hls;
-
-            hls.loadSource(proxyUrl);
-            hls.attachMedia(state.videoPlayer);
-
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                onStreamReady();
-            });
-
-            hls.on(Hls.Events.ERROR, (_, data) => {
-                if (data.fatal) {
-                    hls.destroy();
-                    state.hlsInstance = null;
-                    this.loadStreamDirect(proxyUrl, streamName, streamInput, onStreamReady);
-                }
-            });
-        } else {
-            this.loadStreamDirect(proxyUrl, streamName, streamInput, onStreamReady);
+        } catch (err) {
+            console.error('Stream start error:', err);
+            uiManager.showError(`Failed to start stream: ${err.message}`);
         }
 
         const torrentInfo = document.getElementById('torrentInfo');
@@ -197,7 +200,7 @@ export class MediaManager {
         }
     }
 
-    loadStreamDirect(streamUrl, streamName, streamInput, onReady) {
+    loadStreamDirect(streamUrl, streamName) {
         if (state.mpegtsPlayer) {
             state.mpegtsPlayer.destroy();
             state.mpegtsPlayer = null;
@@ -207,82 +210,77 @@ export class MediaManager {
         state.videoPlayer.onloadeddata = null;
         state.videoPlayer.onerror = null;
 
-        const handleStreamReady = () => {
-            state.videoPlayer.oncanplay = null;
-            state.videoPlayer.onloadeddata = null;
-
-            if (onReady) {
-                onReady();
-            } else {
-                uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
-                socketManager.broadcastMediaAction('load-stream', {
-                    streamUrl: streamUrl,
-                    streamName: streamName
-                });
-            }
-            if (streamInput) streamInput.value = '';
-            state.videoPlayer.play().catch(() => {});
-        };
-
         if (typeof mpegts !== 'undefined' && mpegts.isSupported()) {
             mpegts.LoggingControl.enableAll = false;
 
-            const player = mpegts.createPlayer({
-                type: 'mpegts',
-                isLive: true,
-                url: streamUrl
-            }, {
-                enableWorker: true,
-                enableStashBuffer: true,
-                stashInitialSize: 512 * 1024,
-                autoCleanupSourceBuffer: true,
-                autoCleanupMaxBackwardDuration: 30,
-                autoCleanupMinBackwardDuration: 15,
-                liveBufferLatencyChasing: false,
-                liveBufferLatencyMaxLatency: 10,
-                liveBufferLatencyMinRemain: 3
-            });
+            const createPlayer = () => {
+                const player = mpegts.createPlayer({
+                    type: 'mpegts',
+                    isLive: true,
+                    url: streamUrl
+                }, {
+                    enableWorker: true,
+                    enableStashBuffer: true,
+                    stashInitialSize: 1024 * 1024,
+                    autoCleanupSourceBuffer: true,
+                    autoCleanupMaxBackwardDuration: 60,
+                    autoCleanupMinBackwardDuration: 30,
+                    liveBufferLatencyChasing: true,
+                    liveBufferLatencyMaxLatency: 15,
+                    liveBufferLatencyMinRemain: 5,
+                    fixAudioTimestampGap: true
+                });
 
-            state.mpegtsPlayer = player;
-            player.attachMediaElement(state.videoPlayer);
-            player.load();
+                state.mpegtsPlayer = player;
+                player.attachMediaElement(state.videoPlayer);
+                player.load();
 
-            player.on(mpegts.Events.LOADING_COMPLETE, handleStreamReady);
-            player.on(mpegts.Events.METADATA_ARRIVED, handleStreamReady);
+                player.on(mpegts.Events.METADATA_ARRIVED, () => {
+                    uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
+                });
 
-            player.on(mpegts.Events.ERROR, (errorType, errorDetail) => {
-                console.error('mpegts.js error:', errorType, errorDetail);
-                player.destroy();
-                state.mpegtsPlayer = null;
-                this.loadStreamNative(streamUrl, streamName, streamInput, onReady);
-            });
+                player.on(mpegts.Events.ERROR, (errorType, errorDetail) => {
+                    console.error('mpegts.js error:', errorType, errorDetail);
+                    if (errorType === 'NetworkError' || errorType === 'MediaError') {
+                        console.log('Attempting to reconnect stream...');
+                        setTimeout(() => {
+                            if (state.mpegtsPlayer) {
+                                player.unload();
+                                player.load();
+                                player.play();
+                            }
+                        }, 2000);
+                    }
+                });
 
-            player.play();
+                state.videoPlayer.addEventListener('ended', () => {
+                    if (state.mpegtsPlayer) {
+                        console.log('Stream ended, attempting to restart...');
+                        setTimeout(() => {
+                            if (state.mpegtsPlayer) {
+                                player.unload();
+                                player.load();
+                                player.play();
+                            }
+                        }, 1000);
+                    }
+                });
+
+                player.play();
+            };
+
+            createPlayer();
         } else {
-            this.loadStreamNative(streamUrl, streamName, streamInput, onReady);
+            this.loadStreamNative(streamUrl, streamName);
         }
     }
 
-    loadStreamNative(streamUrl, streamName, streamInput, onReady) {
-        const handleStreamReady = () => {
+    loadStreamNative(streamUrl, streamName) {
+        state.videoPlayer.oncanplay = () => {
             state.videoPlayer.oncanplay = null;
-            state.videoPlayer.onloadeddata = null;
-
-            if (onReady) {
-                onReady();
-            } else {
-                uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
-                socketManager.broadcastMediaAction('load-stream', {
-                    streamUrl: streamUrl,
-                    streamName: streamName
-                });
-            }
-            if (streamInput) streamInput.value = '';
-            state.videoPlayer.play().catch(() => {});
+            uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
+            state.videoPlayer.play().catch(() => { });
         };
-
-        state.videoPlayer.oncanplay = handleStreamReady;
-        state.videoPlayer.onloadeddata = handleStreamReady;
 
         state.videoPlayer.onerror = (e) => {
             console.error('Stream error:', e, state.videoPlayer.error);
@@ -376,37 +374,35 @@ export class MediaManager {
                 break;
 
             case 'load-stream':
+                if (data.user === state.userName) {
+                    break;
+                }
+
                 state.currentTorrentInfo = null;
                 if (torrentManager) {
                     torrentManager.clearTorrentProgress();
                 }
-                uiManager.updateMediaStatus(`📡 ${data.user} started stream: ${data.mediaData.data.streamName}`);
 
                 if (state.hlsInstance) {
                     state.hlsInstance.destroy();
                     state.hlsInstance = null;
                 }
 
+                if (state.mpegtsPlayer) {
+                    state.mpegtsPlayer.destroy();
+                    state.mpegtsPlayer = null;
+                }
+
                 state.videoPlayer.onloadedmetadata = null;
                 state.videoPlayer.onerror = null;
 
-                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                    const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
-                    state.hlsInstance = hls;
-                    hls.loadSource(data.mediaData.data.streamUrl);
-                    hls.attachMedia(state.videoPlayer);
-                    hls.on(Hls.Events.ERROR, (_, errData) => {
-                        if (errData.fatal) {
-                            hls.destroy();
-                            state.hlsInstance = null;
-                            state.videoPlayer.src = data.mediaData.data.streamUrl;
-                            state.videoPlayer.load();
-                        }
-                    });
-                } else {
-                    state.videoPlayer.src = data.mediaData.data.streamUrl;
-                    state.videoPlayer.load();
-                }
+                const streamName = data.mediaData.data.streamName || 'Live Stream';
+                const relayPath = data.mediaData.data.relayUrl || `/api/stream/relay/${state.currentRoomId}`;
+                const socketId = state.socket ? state.socket.id : '';
+                const relayUrl = `${window.location.origin}${relayPath}?socketId=${encodeURIComponent(socketId)}`;
+
+                this.loadStreamDirect(relayUrl, streamName);
+                uiManager.updateMediaStatus(`📡 ${data.user} started stream: ${streamName}`);
 
                 const torrentInfoLoadStream = document.getElementById('torrentInfo');
                 if (torrentInfoLoadStream) {
@@ -453,5 +449,38 @@ export class MediaManager {
 
         state.videoPlayer.load();
         document.getElementById('torrentInfo').classList.add('hidden');
+    }
+
+    restoreStreamMedia(mediaData, videoState) {
+        const streamName = mediaData.data.streamName || 'Live Stream';
+        const relayPath = mediaData.data.relayUrl || `/api/stream/relay/${state.currentRoomId}`;
+
+        console.log('[STREAM DEBUG] restoreStreamMedia called');
+        console.log('[STREAM DEBUG] relayPath:', relayPath);
+
+        state.videoPlayer.onloadedmetadata = null;
+        state.videoPlayer.onerror = null;
+
+        if (state.hlsInstance) {
+            state.hlsInstance.destroy();
+            state.hlsInstance = null;
+        }
+
+        if (state.mpegtsPlayer) {
+            state.mpegtsPlayer.destroy();
+            state.mpegtsPlayer = null;
+        }
+
+        const socketId = state.socket ? state.socket.id : '';
+        const relayUrl = `${window.location.origin}${relayPath}?socketId=${encodeURIComponent(socketId)}`;
+        console.log('[STREAM DEBUG] relayUrl:', relayUrl);
+
+        this.loadStreamDirect(relayUrl, streamName);
+        uiManager.updateMediaStatus(`📡 Watching: ${streamName}`);
+
+        const torrentInfo = document.getElementById('torrentInfo');
+        if (torrentInfo) {
+            torrentInfo.classList.add('hidden');
+        }
     }
 }

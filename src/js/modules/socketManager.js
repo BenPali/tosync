@@ -34,7 +34,7 @@ export class SocketManager {
             const pathParts = window.location.pathname.split('/');
             const roomCode = pathParts[1];
 
-            if (roomCode && roomCode.length === 6) {
+            if (roomCode && roomCode.length === config.ROOM_CODE_LENGTH) {
                 // Direct URL access - show room not found page
                 document.getElementById('roomSelector').classList.add('hidden');
                 document.getElementById('guestJoinForm')?.remove();
@@ -75,12 +75,18 @@ export class SocketManager {
                 subtitleManager.updateSubtitlesList();
             }
 
+            console.log('[ROOM-STATE DEBUG] currentMedia:', data.currentMedia);
+
             if (data.currentMedia) {
+                console.log('[ROOM-STATE DEBUG] type:', data.currentMedia.type);
 
                 if (data.currentMedia.type === 'file') {
                     mediaManager.restoreFileMedia(data.currentMedia, data.videoState);
                 } else if (data.currentMedia.type === 'torrent' && torrentManager) {
                     torrentManager.restoreTorrentMedia(data.currentMedia, data.videoState);
+                } else if (data.currentMedia.type === 'stream') {
+                    console.log('[ROOM-STATE DEBUG] Calling restoreStreamMedia');
+                    mediaManager.restoreStreamMedia(data.currentMedia, data.videoState);
                 }
             }
         });
@@ -107,16 +113,8 @@ export class SocketManager {
             uiManager.updateLastAction(`${data.user.name} joined (${data.user.role})`);
         });
 
-        // Enhanced user-left handler that supports admin succession
         state.socket.on('user-left', (data) => {
-
-            // Check if this event indicates admin succession
-            if (data.adminChanged && data.newAdminId === state.socket?.id) {
-                authManager.handleUserLeft(data);
-            } else {
-                // Regular user departure
-                uiManager.updateLastAction(`${data.user.name} left`);
-            }
+            uiManager.updateLastAction(`${data.user.name} left`);
         });
 
         state.socket.on('force-sync', (data) => {
@@ -236,70 +234,6 @@ export class SocketManager {
         state.socket.emit('media-action', {
             action: action,
             mediaData: mediaData
-        });
-    }
-
-    // Enhanced connection status monitoring
-    monitorConnection() {
-        if (!state.socket) return;
-
-        // Check connection status every 30 seconds
-        setInterval(() => {
-            if (state.socket.connected && state.isConnected) {
-                // Connection is healthy
-            } else if (!state.socket.connected && state.isConnected) {
-                // Connection lost but state not updated
-                console.warn('Connection health check: LOST');
-                state.isConnected = false;
-                uiManager.updateConnectionStatus('Connection lost', 'disconnected');
-            }
-        }, 30000);
-    }
-
-    // Gracefully disconnect
-    disconnect() {
-        if (state.socket) {
-            state.socket.disconnect();
-            state.socket = null;
-            state.isConnected = false;
-        }
-    }
-
-    // Force reconnection
-    reconnect() {
-        if (state.socket) {
-            state.socket.connect();
-        }
-    }
-
-    // Get connection statistics
-    getConnectionStats() {
-        if (!state.socket) return null;
-
-        return {
-            connected: state.socket.connected,
-            id: state.socket.id,
-            transport: state.socket.io.engine.transport.name,
-            upgraded: state.socket.io.engine.upgraded,
-            pingInterval: state.socket.io.engine.pingInterval,
-            pingTimeout: state.socket.io.engine.pingTimeout
-        };
-    }
-
-    // Send custom event with error handling
-    emitWithCallback(eventName, data, callback) {
-        if (!state.socket || !state.isConnected) {
-            if (callback) callback(new Error('Not connected to server'));
-            return;
-        }
-
-        const timeout = setTimeout(() => {
-            if (callback) callback(new Error('Request timeout'));
-        }, 10000); // 10 second timeout
-
-        state.socket.emit(eventName, data, (response) => {
-            clearTimeout(timeout);
-            if (callback) callback(null, response);
         });
     }
 }

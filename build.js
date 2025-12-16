@@ -6,7 +6,10 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-console.log('ToSync Build Script\n');
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+const VERSION = pkg.version;
+
+console.log(`ToSync Build Script v${VERSION}\n`);
 
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) {
@@ -67,7 +70,7 @@ function buildPublic() {
     const configContent = fs.readFileSync('src/js/config.public.js', 'utf8');
     const roomCodeLengthMatch = configContent.match(/ROOM_CODE_LENGTH:\s*(\d+)/);
     const roomCodeLength = roomCodeLengthMatch ? roomCodeLengthMatch[1] : '6';
-    const replacements = { ROOM_CODE_LENGTH: roomCodeLength };
+    const replacements = { ROOM_CODE_LENGTH: roomCodeLength, VERSION: VERSION };
 
     ensureDir(dest);
     ensureDir(path.join(dest, 'js'));
@@ -96,7 +99,7 @@ function buildPrivate() {
     const configContent = fs.readFileSync('src/js/config.private.js', 'utf8');
     const roomCodeLengthMatch = configContent.match(/ROOM_CODE_LENGTH:\s*(\d+)/);
     const roomCodeLength = roomCodeLengthMatch ? roomCodeLengthMatch[1] : '32';
-    const replacements = { ROOM_CODE_LENGTH: roomCodeLength };
+    const replacements = { ROOM_CODE_LENGTH: roomCodeLength, VERSION: VERSION };
 
     ensureDir(dest);
     ensureDir(path.join(dest, 'js'));

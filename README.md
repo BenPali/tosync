@@ -21,21 +21,22 @@ Use https://tosync.org or follow these steps for local use:
    npm install
    ```
 
-2. ** Build & Start the server**
-2.1 ** Public app **
+2. **Build & Start the server**
+
+   2.1 **Public app**
    ```bash
    npm run build
    npm run start
    ```
 
-2.1 ** Advanced app (requires login) **
+   2.2 **Advanced app (requires login)**
    ```bash
    npm run build
    npm run start:torrent
    ```
 
-
 3. **Open in browser**
+
    Public
    ```
    http://localhost:3000
