@@ -316,6 +316,7 @@ export class RoomManager {
 
         state.currentRoomId = null;
         state.isRoomCreator = false;
+        state.isLiveStream = false;
         state.currentTorrentInfo = null;
         if (torrentManager) {
             torrentManager.clearTorrentProgress();

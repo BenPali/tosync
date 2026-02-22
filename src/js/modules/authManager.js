@@ -218,6 +218,7 @@ export class AuthManager {
         }
 
         state.currentTorrentInfo = null;
+        state.isLiveStream = false;
         if (torrentManager) {
             torrentManager.clearTorrentProgress();
         }

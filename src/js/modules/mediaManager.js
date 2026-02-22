@@ -52,6 +52,7 @@ export class MediaManager {
 
 
                     // Clear previous event listeners to prevent multiple calls
+                    state.isLiveStream = false;
                     state.videoPlayer.onloadedmetadata = null;
                     state.videoPlayer.onerror = null;
 
@@ -201,6 +202,8 @@ export class MediaManager {
     }
 
     loadStreamDirect(streamUrl, streamName) {
+        state.isLiveStream = true;
+
         if (state.mpegtsPlayer) {
             state.mpegtsPlayer.destroy();
             state.mpegtsPlayer = null;
@@ -298,6 +301,8 @@ export class MediaManager {
             return;
         }
 
+        state.isLiveStream = false;
+
         if (state.hlsInstance) {
             state.hlsInstance.destroy();
             state.hlsInstance = null;
@@ -329,6 +334,7 @@ export class MediaManager {
 
         switch (data.action) {
             case 'load-torrent':
+                state.isLiveStream = false;
                 state.currentTorrentInfo = data.mediaData.data;
                 uiManager.updateMediaStatus(`${data.user} loaded torrent: ${state.currentTorrentInfo.name}`);
 
@@ -355,6 +361,7 @@ export class MediaManager {
                 break;
 
             case 'load-file':
+                state.isLiveStream = false;
                 state.currentTorrentInfo = null;
                 if (torrentManager) {
                     torrentManager.clearTorrentProgress();
@@ -411,6 +418,7 @@ export class MediaManager {
                 break;
 
             case 'clear-media':
+                state.isLiveStream = false;
                 state.currentTorrentInfo = null;
                 if (torrentManager) {
                     torrentManager.clearTorrentProgress();
@@ -429,6 +437,7 @@ export class MediaManager {
 
     // Restore file media for late-joining users
     restoreFileMedia(mediaData, videoState) {
+        state.isLiveStream = false;
         const videoUrl = mediaData.data.url;
 
         // Clear previous event listeners

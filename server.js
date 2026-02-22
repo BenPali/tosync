@@ -648,9 +648,9 @@ if (ENABLE_TORRENTS) {
 
             activeStreams.set(roomId, streamInfo);
 
-            const pumpSource = async () => {
+            const pumpSource = async (fetchResponse) => {
                 try {
-                    const reader = response.body.getReader();
+                    const reader = fetchResponse.body.getReader();
 
                     while (streamInfo.isActive) {
                         const { done, value } = await reader.read();
@@ -673,19 +673,48 @@ if (ENABLE_TORRENTS) {
                     if (err.name !== 'AbortError') {
                         console.error(`Stream source error for room ${roomId}:`, err.message);
                     }
-                } finally {
-                    streamInfo.isActive = false;
-                    for (const [clientId, clientRes] of streamInfo.clients) {
-                        try {
-                            if (!clientRes.writableEnded) clientRes.end();
-                        } catch (e) { }
-                    }
-                    activeStreams.delete(roomId);
-                    console.log(`Stream relay ended for room ${roomId}`);
                 }
+
+                if (streamInfo.isActive && streamInfo.clients.size > 0) {
+                    console.log(`Stream dropped for room ${roomId}, reconnecting in 3s...`);
+                    await new Promise(r => setTimeout(r, 3000));
+
+                    if (!streamInfo.isActive || streamInfo.clients.size === 0) return;
+
+                    try {
+                        const newController = new AbortController();
+                        streamInfo.controller = newController;
+
+                        const reconnectResponse = await fetch(targetUrl.toString(), {
+                            signal: newController.signal,
+                            headers: {
+                                'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
+                                'Host': urlObj.hostname
+                            }
+                        });
+
+                        if (reconnectResponse.ok) {
+                            console.log(`Stream reconnected for room ${roomId}`);
+                            return pumpSource(reconnectResponse);
+                        }
+                    } catch (reconnectErr) {
+                        if (reconnectErr.name !== 'AbortError') {
+                            console.error(`Stream reconnect failed for room ${roomId}:`, reconnectErr.message);
+                        }
+                    }
+                }
+
+                streamInfo.isActive = false;
+                for (const [clientId, clientRes] of streamInfo.clients) {
+                    try {
+                        if (!clientRes.writableEnded) clientRes.end();
+                    } catch (e) { }
+                }
+                activeStreams.delete(roomId);
+                console.log(`Stream relay ended for room ${roomId}`);
             };
 
-            pumpSource();
+            pumpSource(response);
 
             console.log(`Stream relay started for room ${roomId}: ${urlObj.hostname}`);
 

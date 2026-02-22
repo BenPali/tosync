@@ -24,6 +24,7 @@ export const state = {
     lastMediaAction: null,
     hlsInstance: null,
     mpegtsPlayer: null,
+    isLiveStream: false,
 
     // Subtitles
     availableSubtitles: [],

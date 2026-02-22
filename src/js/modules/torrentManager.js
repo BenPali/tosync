@@ -204,6 +204,7 @@ export class TorrentManager {
     }
 
     restoreTorrentMedia(mediaData, videoState) {
+        state.isLiveStream = false;
         state.currentTorrentInfo = mediaData.data;
 
         if (state.currentTorrentInfo.streamUrl) {

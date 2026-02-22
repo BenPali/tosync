@@ -118,6 +118,7 @@ export class SocketManager {
         });
 
         state.socket.on('force-sync', (data) => {
+            if (state.isLiveStream) return;
             state.isReceivingSync = true;
             state.videoPlayer.currentTime = data.time;
             if (data.isPlaying && state.videoPlayer.paused) {

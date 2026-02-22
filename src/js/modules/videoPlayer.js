@@ -17,6 +17,7 @@ export class VideoPlayer {
 
     // Event handlers for automatic synchronization
     handlePlay() {
+        if (state.isLiveStream) return;
         if (!state.isReceivingSync && state.isConnected) {
             socketManager.broadcastVideoAction('play', state.videoPlayer.currentTime);
             uiManager.updateLastAction(`${state.userName} played video`);
@@ -24,6 +25,7 @@ export class VideoPlayer {
     }
 
     handlePause() {
+        if (state.isLiveStream) return;
         if (!state.isReceivingSync && state.isConnected) {
             socketManager.broadcastVideoAction('pause', state.videoPlayer.currentTime);
             uiManager.updateLastAction(`${state.userName} paused video`);
@@ -31,6 +33,7 @@ export class VideoPlayer {
     }
 
     handleRateChange() {
+        if (state.isLiveStream) return;
         if (!state.isReceivingSync && state.isConnected) {
             socketManager.broadcastVideoAction('playback-rate', state.videoPlayer.currentTime, state.videoPlayer.playbackRate);
             uiManager.updateLastAction(`${state.userName} changed speed to ${state.videoPlayer.playbackRate}x`);
@@ -39,6 +42,7 @@ export class VideoPlayer {
 
     // Handle video synchronization from other users
     handleVideoSync(data) {
+        if (state.isLiveStream) return;
         if (state.isReceivingSync) return;
 
         state.isReceivingSync = true;
@@ -81,6 +85,7 @@ export class VideoPlayer {
 
     // Video control functions
     togglePlay() {
+        if (state.isLiveStream) return;
         if (state.videoPlayer.paused) {
             state.videoPlayer.play();
         } else {
@@ -89,11 +94,13 @@ export class VideoPlayer {
     }
 
     seekBackward() {
+        if (state.isLiveStream) return;
         state.videoPlayer.currentTime = Math.max(0, state.videoPlayer.currentTime - 10);
         socketManager.broadcastVideoAction('seek', state.videoPlayer.currentTime);
     }
 
     seekForward() {
+        if (state.isLiveStream) return;
         state.videoPlayer.currentTime = Math.min(state.videoPlayer.duration || 0, state.videoPlayer.currentTime + 10);
         socketManager.broadcastVideoAction('seek', state.videoPlayer.currentTime);
     }
@@ -109,6 +116,7 @@ export class VideoPlayer {
     }
 
     syncTime() {
+        if (state.isLiveStream) return;
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can force sync');
             return;
@@ -125,6 +133,7 @@ export class VideoPlayer {
     }
 
     restartVideo() {
+        if (state.isLiveStream) return;
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can restart video');
             return;
@@ -134,6 +143,7 @@ export class VideoPlayer {
     }
 
     setPlaybackRate(rate) {
+        if (state.isLiveStream) return;
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can change playback speed');
             return;

@@ -157,7 +157,6 @@ function setupUIEventListeners() {
         if (iptvManager) {
             addListener('loadPlaylistBtn', () => iptvManager.loadPlaylist());
         }
-        addListener('loadStreamBtn', () => mediaManager.loadStream());
     }
 
     const roomInput = document.getElementById('roomCodeInput');
