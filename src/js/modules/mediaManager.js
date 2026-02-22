@@ -113,93 +113,6 @@ export class MediaManager {
         xhr.send(formData);
     }
 
-    async loadStream() {
-        if (state.userRole !== 'admin') {
-            uiManager.showError('Only admins can load streams');
-            return;
-        }
-
-        const streamInput = document.getElementById('streamInput');
-        const streamUrl = streamInput?.value.trim();
-
-        if (!streamUrl) {
-            uiManager.showError('Please enter a stream URL');
-            return;
-        }
-
-        if (!streamUrl.startsWith('http://') && !streamUrl.startsWith('https://')) {
-            uiManager.showError('Invalid URL format');
-            return;
-        }
-
-        uiManager.updateMediaStatus('Starting stream relay...');
-
-        state.currentTorrentInfo = null;
-        if (torrentManager) {
-            torrentManager.clearTorrentProgress();
-        }
-
-        if (state.hlsInstance) {
-            state.hlsInstance.destroy();
-            state.hlsInstance = null;
-        }
-
-        if (state.mpegtsPlayer) {
-            state.mpegtsPlayer.destroy();
-            state.mpegtsPlayer = null;
-        }
-
-        state.videoPlayer.onloadedmetadata = null;
-        state.videoPlayer.onerror = null;
-
-        let streamName;
-        try {
-            streamName = new URL(streamUrl).pathname.split('/').pop() || 'Live Stream';
-        } catch {
-            streamName = 'Live Stream';
-        }
-
-        try {
-            const response = await fetch('/api/stream/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    streamUrl: streamUrl,
-                    roomId: state.currentRoomId
-                })
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                uiManager.showError(`Failed to start stream: ${error.error || response.status}`);
-                return;
-            }
-
-            const data = await response.json();
-            const socketId = state.socket ? state.socket.id : '';
-            const relayUrl = `${window.location.origin}${data.relayUrl}?socketId=${encodeURIComponent(socketId)}`;
-
-            socketManager.broadcastMediaAction('load-stream', {
-                streamUrl: streamUrl,
-                streamName: streamName,
-                relayUrl: data.relayUrl
-            });
-            streamInput.value = '';
-
-            this.loadStreamDirect(relayUrl, streamName);
-            uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
-
-        } catch (err) {
-            console.error('Stream start error:', err);
-            uiManager.showError(`Failed to start stream: ${err.message}`);
-        }
-
-        const torrentInfo = document.getElementById('torrentInfo');
-        if (torrentInfo) {
-            torrentInfo.classList.add('hidden');
-        }
-    }
 
     loadStreamDirect(streamUrl, streamName) {
         state.isLiveStream = true;
@@ -464,9 +377,6 @@ export class MediaManager {
         const streamName = mediaData.data.streamName || 'Live Stream';
         const relayPath = mediaData.data.relayUrl || `/api/stream/relay/${state.currentRoomId}`;
 
-        console.log('[STREAM DEBUG] restoreStreamMedia called');
-        console.log('[STREAM DEBUG] relayPath:', relayPath);
-
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
 
@@ -482,7 +392,6 @@ export class MediaManager {
 
         const socketId = state.socket ? state.socket.id : '';
         const relayUrl = `${window.location.origin}${relayPath}?socketId=${encodeURIComponent(socketId)}`;
-        console.log('[STREAM DEBUG] relayUrl:', relayUrl);
 
         this.loadStreamDirect(relayUrl, streamName);
         uiManager.updateMediaStatus(`📡 Watching: ${streamName}`);

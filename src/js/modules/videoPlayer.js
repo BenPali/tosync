@@ -5,14 +5,20 @@ import { config } from '../config.js';
 import { socketManager, uiManager } from '../main.js';
 
 export class VideoPlayer {
-    setupEventListeners() {
-        state.videoPlayer.removeEventListener('play', this.handlePlay);
-        state.videoPlayer.removeEventListener('pause', this.handlePause);
-        state.videoPlayer.removeEventListener('ratechange', this.handleRateChange);
+    constructor() {
+        this._boundHandlePlay = this.handlePlay.bind(this);
+        this._boundHandlePause = this.handlePause.bind(this);
+        this._boundHandleRateChange = this.handleRateChange.bind(this);
+    }
 
-        state.videoPlayer.addEventListener('play', this.handlePlay.bind(this));
-        state.videoPlayer.addEventListener('pause', this.handlePause.bind(this));
-        state.videoPlayer.addEventListener('ratechange', this.handleRateChange.bind(this));
+    setupEventListeners() {
+        state.videoPlayer.removeEventListener('play', this._boundHandlePlay);
+        state.videoPlayer.removeEventListener('pause', this._boundHandlePause);
+        state.videoPlayer.removeEventListener('ratechange', this._boundHandleRateChange);
+
+        state.videoPlayer.addEventListener('play', this._boundHandlePlay);
+        state.videoPlayer.addEventListener('pause', this._boundHandlePause);
+        state.videoPlayer.addEventListener('ratechange', this._boundHandleRateChange);
     }
 
     // Event handlers for automatic synchronization

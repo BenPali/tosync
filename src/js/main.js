@@ -79,6 +79,9 @@ async function checkAuthStatus() {
 
             const usernameSpan = document.getElementById('loggedInUsername');
             if (usernameSpan) usernameSpan.textContent = data.username;
+
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) logoutBtn.classList.remove('hidden');
         }
     } catch (error) {
         console.error('Auth check failed:', error);
@@ -95,7 +98,6 @@ async function handleLogout() {
 }
 
 function setupUIEventListeners() {
-    console.log('[SETUP] Events initialized');
 
     if (config.ENABLE_TORRENTS) {
         const logoutBtn = document.getElementById('logoutBtn');
@@ -146,7 +148,6 @@ function setupUIEventListeners() {
     addListener('fullscreenBtn', () => videoPlayer.toggleFullscreen());
     addListener('syncTimeBtn', () => videoPlayer.syncTime());
     addListener('restartBtn', () => videoPlayer.restartVideo());
-    addListener('rate05Btn', () => videoPlayer.setPlaybackRate(0.5));
     addListener('rate1Btn', () => videoPlayer.setPlaybackRate(1));
     addListener('rate15Btn', () => videoPlayer.setPlaybackRate(1.5));
 
@@ -207,5 +208,3 @@ function setupUIEventListeners() {
         }
     });
 }
-
-window.playLibraryFile = (fileUrl, fileName) => fileLibraryManager.playLibraryFile(fileUrl, fileName);

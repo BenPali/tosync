@@ -54,9 +54,11 @@ export class TorrentManager {
                 this.displayTorrentFiles(torrentData.files);
             }
 
-            if (torrentData.files.length > 0) {
+            if (torrentData.files.length === 1) {
                 const firstFile = torrentData.files[0];
                 this.playTorrentFile(torrentData.infoHash, firstFile.index, firstFile.name);
+            } else if (torrentData.files.length > 1) {
+                uiManager.updateMediaStatus(`${torrentData.files.length} files found — select one to play`);
             }
 
             this.updateTorrentProgressFromServer();

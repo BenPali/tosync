@@ -63,21 +63,36 @@ export class FileLibraryManager {
         const fileItem = document.createElement('div');
         fileItem.className = `library-file-item ${type} flex justify-between items-center p-2 mb-1 rounded text-xs cursor-pointer text-slate-300`;
 
-        const fileName = file.originalName;
-        const fileSize = uiManager.formatBytes(file.size);
-        const fileDate = new Date(file.addedAt).toLocaleDateString();
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'flex-1 min-w-0 mr-2';
 
-        fileItem.innerHTML = `
-            <div class="flex-1 min-w-0 mr-2">
-                <div class="font-medium truncate text-white" title="${fileName}">${fileName}</div>
-                <div class="flex gap-2 text-[10px] text-slate-500">
-                    <span class="text-emerald-500">${fileSize}</span>
-                    <span>${fileDate}</span>
-                    ${type === 'downloaded' ? `<span class="text-blue-400">📁 ${file.folderName}</span>` : ''}
-                </div>
-            </div>
-            <button class="bg-primary/20 hover:bg-primary/40 text-primary px-2 py-1 rounded transition text-[10px] uppercase font-bold" onclick="playLibraryFile('${file.url}', '${fileName}')">Play</button>
-        `;
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'font-medium truncate text-white';
+        nameDiv.textContent = file.originalName;
+        nameDiv.title = file.originalName;
+        infoDiv.appendChild(nameDiv);
+
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'flex gap-2 text-[10px] text-slate-500';
+        metaDiv.innerHTML = `<span class="text-emerald-500">${uiManager.formatBytes(file.size)}</span><span>${new Date(file.addedAt).toLocaleDateString()}</span>`;
+        if (type === 'downloaded' && file.folderName) {
+            const folderSpan = document.createElement('span');
+            folderSpan.className = 'text-blue-400';
+            folderSpan.textContent = file.folderName;
+            metaDiv.appendChild(folderSpan);
+        }
+        infoDiv.appendChild(metaDiv);
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'bg-primary/20 hover:bg-primary/40 text-primary px-2 py-1 rounded transition text-[10px] uppercase font-bold';
+        playBtn.textContent = 'Play';
+        playBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.playLibraryFile(file.url, file.originalName);
+        });
+
+        fileItem.appendChild(infoDiv);
+        fileItem.appendChild(playBtn);
 
         return fileItem;
     }

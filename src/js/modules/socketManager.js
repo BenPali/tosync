@@ -75,17 +75,12 @@ export class SocketManager {
                 subtitleManager.updateSubtitlesList();
             }
 
-            console.log('[ROOM-STATE DEBUG] currentMedia:', data.currentMedia);
-
             if (data.currentMedia) {
-                console.log('[ROOM-STATE DEBUG] type:', data.currentMedia.type);
-
                 if (data.currentMedia.type === 'file') {
                     mediaManager.restoreFileMedia(data.currentMedia, data.videoState);
                 } else if (data.currentMedia.type === 'torrent' && torrentManager) {
                     torrentManager.restoreTorrentMedia(data.currentMedia, data.videoState);
                 } else if (data.currentMedia.type === 'stream') {
-                    console.log('[ROOM-STATE DEBUG] Calling restoreStreamMedia');
                     mediaManager.restoreStreamMedia(data.currentMedia, data.videoState);
                 }
             }

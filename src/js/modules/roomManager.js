@@ -293,7 +293,7 @@ export class RoomManager {
         uiManager.updateMediaStatus('Select a room to begin');
     }
 
-    leaveRoom() {
+    cleanupSession() {
         if (state.socket) {
             state.socket.disconnect();
             state.socket = null;
@@ -328,8 +328,6 @@ export class RoomManager {
         state.userName = "Anonymous";
         state.isConnected = false;
 
-        window.history.pushState({}, '', '/');
-
         const guestJoinForm = document.getElementById('guestJoinForm');
         if (guestJoinForm) guestJoinForm.remove();
         const adminNameForm = document.getElementById('adminNameForm');
@@ -341,31 +339,25 @@ export class RoomManager {
         if (torrentInput) torrentInput.value = '';
         const fileInput = document.getElementById('fileInput');
         if (fileInput) fileInput.value = '';
+    }
 
+    leaveRoom() {
+        this.cleanupSession();
+        window.history.pushState({}, '', '/');
         this.navigateToHome();
     }
 
     backToRoomSelect() {
-        const guestJoinForm = document.getElementById('guestJoinForm');
-        if (guestJoinForm) guestJoinForm.remove();
-
-        const adminNameForm = document.getElementById('adminNameForm');
-        if (adminNameForm) adminNameForm.remove();
-
-        const roleSelector = document.getElementById('roleSelector');
-        if (roleSelector) roleSelector.classList.add('hidden');
-
-        state.currentRoomId = null;
-        state.isRoomCreator = false;
-
+        this.cleanupSession();
         window.history.pushState({}, '', '/');
-
         this.navigateToHome();
     }
 }
 
 export function setupPopStateHandler(roomManagerInstance) {
     window.addEventListener('popstate', (event) => {
+        roomManagerInstance.cleanupSession();
+
         const roomId = event.state?.roomId;
         const isRoomCreator = event.state?.isRoomCreator ?? false;
 
@@ -379,7 +371,7 @@ export function setupPopStateHandler(roomManagerInstance) {
                 roomManagerInstance.showGuestNameForm();
             }
         } else {
-            roomManagerInstance.backToRoomSelect();
+            roomManagerInstance.navigateToHome();
         }
     });
 }

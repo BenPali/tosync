@@ -358,6 +358,7 @@ if (ENABLE_TORRENTS) {
 
                 torrent.once('ready', () => {
                     clearTimeout(timeout);
+                    torrent.files.forEach(f => f.deselect());
                     resolve();
                 });
 
@@ -445,6 +446,8 @@ if (ENABLE_TORRENTS) {
         if (!file) {
             return res.status(404).json({ error: 'File not found' });
         }
+
+        file.select();
 
         const ext = path.extname(file.name).toLowerCase();
         const contentType = {
@@ -1172,7 +1175,12 @@ app.use('/rooms/:roomId/subtitles/:filename', async (req, res, next) => {
 
         const { roomId, filename } = req.params;
         const subtitlesDir = path.join(roomsDir, roomId, 'subtitles');
-        const filePath = path.join(subtitlesDir, filename);
+        const filePath = path.resolve(subtitlesDir, filename);
+
+        if (!filePath.startsWith(subtitlesDir)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
         const ext = path.extname(filename).toLowerCase();
 
         if (!fs.existsSync(filePath)) {
