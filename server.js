@@ -835,7 +835,7 @@ if (ENABLE_TORRENTS) {
                 channelCount: parsed.channels.length,
                 groups: Object.keys(parsed.groups).sort().map(groupName => ({
                     name: groupName,
-                    channels: parsed.groups[groupName].map(idx => parsed.channels[idx])
+                    count: parsed.groups[groupName].length
                 }))
             });
 
@@ -844,6 +844,54 @@ if (ENABLE_TORRENTS) {
             console.error(`Playlist fetch failed: ${err.message}${causeMsg}`);
             res.status(500).json({ error: `Failed to fetch playlist: ${err.message}${causeMsg}` });
         }
+    });
+
+    app.get('/api/stream/playlist/:roomId/group', requireAdmin, (req, res) => {
+        const { roomId } = req.params;
+        const groupName = req.query.name;
+
+        if (!groupName) {
+            return res.status(400).json({ error: 'Missing group name' });
+        }
+
+        const playlist = playlistCache.get(roomId);
+        if (!playlist) {
+            return res.status(404).json({ error: 'No playlist loaded for this room' });
+        }
+
+        const indices = playlist.groups[groupName];
+        if (!indices) {
+            return res.status(404).json({ error: 'Group not found' });
+        }
+
+        const channels = indices.map(idx => playlist.channels[idx]);
+
+        const query = req.query.q?.toLowerCase();
+        const filtered = query
+            ? channels.filter(ch => ch.name.toLowerCase().includes(query))
+            : channels;
+
+        res.json({ group: groupName, channels: filtered });
+    });
+
+    app.get('/api/stream/playlist/:roomId/search', requireAdmin, (req, res) => {
+        const { roomId } = req.params;
+        const query = req.query.q?.toLowerCase();
+
+        if (!query || query.length < 2) {
+            return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+        }
+
+        const playlist = playlistCache.get(roomId);
+        if (!playlist) {
+            return res.status(404).json({ error: 'No playlist loaded for this room' });
+        }
+
+        const results = playlist.channels
+            .filter(ch => ch.name.toLowerCase().includes(query))
+            .slice(0, 100);
+
+        res.json({ query, results, totalMatches: results.length });
     });
 
     app.get('/api/stream/proxy', async (req, res) => {
