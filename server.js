@@ -811,8 +811,8 @@ if (ENABLE_TORRENTS) {
 
             const body = await response.text();
 
-            if (body.length > 10 * 1024 * 1024) {
-                return res.status(400).json({ error: 'Playlist too large (>10MB)' });
+            if (body.length > 50 * 1024 * 1024) {
+                return res.status(400).json({ error: 'Playlist too large (>50MB)' });
             }
 
             if (!body.trim().startsWith('#EXTM3U')) {
