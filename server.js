@@ -793,7 +793,7 @@ if (ENABLE_TORRENTS) {
             }
 
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 30000);
+            const timeout = setTimeout(() => controller.abort(), 300000);
 
             const response = await fetch(targetUrl.toString(), {
                 signal: controller.signal,
