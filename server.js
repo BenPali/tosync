@@ -498,6 +498,49 @@ if (ENABLE_TORRENTS) {
         }
     });
 
+    function parseM3U(content) {
+        const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+        if (!lines[0] || !lines[0].startsWith('#EXTM3U')) {
+            throw new Error('Invalid M3U file: missing #EXTM3U header');
+        }
+
+        const channels = [];
+        const streamUrls = [];
+        const groups = {};
+
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (line.startsWith('#EXTINF:')) {
+                const tvgName = line.match(/tvg-name="([^"]*)"/)?.[1] || '';
+                const tvgLogo = line.match(/tvg-logo="([^"]*)"/)?.[1] || '';
+                const groupTitle = line.match(/group-title="([^"]*)"/)?.[1] || 'Uncategorized';
+                const displayName = line.split(',').pop()?.trim() || tvgName || 'Unknown';
+
+                let url = '';
+                for (let j = i + 1; j < lines.length; j++) {
+                    if (!lines[j].startsWith('#')) {
+                        url = lines[j];
+                        i = j;
+                        break;
+                    }
+                }
+
+                if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                    const index = channels.length;
+                    channels.push({ index, name: displayName, logo: tvgLogo, group: groupTitle });
+                    streamUrls.push(url);
+
+                    if (!groups[groupTitle]) groups[groupTitle] = [];
+                    groups[groupTitle].push(index);
+                }
+            }
+        }
+
+        return { channels, streamUrls, groups };
+    }
+
     const isPrivateIP = (ip) => {
         if (/^127\./.test(ip)) return true;
         if (/^10\./.test(ip)) return true;
@@ -517,10 +560,30 @@ if (ENABLE_TORRENTS) {
     };
 
     app.post('/api/stream/start', requireAdmin, async (req, res) => {
-        const { streamUrl, roomId } = req.body;
+        const { streamUrl: directStreamUrl, channelId, roomId } = req.body;
 
-        if (!streamUrl || !roomId) {
-            return res.status(400).json({ error: 'Missing streamUrl or roomId' });
+        if (!roomId) {
+            return res.status(400).json({ error: 'Missing roomId' });
+        }
+
+        let streamUrl;
+        let streamName;
+
+        if (channelId !== undefined) {
+            const playlist = playlistCache.get(roomId);
+            if (!playlist) {
+                return res.status(400).json({ error: 'No playlist loaded for this room. Load a playlist first.' });
+            }
+            const idx = parseInt(channelId, 10);
+            if (isNaN(idx) || idx < 0 || idx >= playlist.streamUrls.length) {
+                return res.status(400).json({ error: 'Invalid channel ID' });
+            }
+            streamUrl = playlist.streamUrls[idx];
+            streamName = playlist.channels[idx]?.name || 'IPTV Channel';
+        } else if (directStreamUrl) {
+            streamUrl = directStreamUrl;
+        } else {
+            return res.status(400).json({ error: 'Missing streamUrl or channelId' });
         }
 
         let urlObj;
@@ -629,7 +692,7 @@ if (ENABLE_TORRENTS) {
             res.json({
                 success: true,
                 relayUrl: `/api/stream/relay/${roomId}`,
-                streamUrl: streamUrl
+                streamName: streamName || undefined
             });
 
         } catch (err) {
@@ -690,6 +753,100 @@ if (ENABLE_TORRENTS) {
             res.json({ success: true });
         } else {
             res.status(404).json({ error: 'No active stream for this room' });
+        }
+    });
+
+    app.post('/api/stream/parse-playlist', torrentLimiter, requireAdmin, async (req, res) => {
+        const { playlistUrl, roomId } = req.body;
+
+        if (!playlistUrl || !roomId) {
+            return res.status(400).json({ error: 'Missing playlistUrl or roomId' });
+        }
+
+        let urlObj;
+        try {
+            urlObj = new URL(playlistUrl);
+            if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                return res.status(400).json({ error: 'Invalid protocol' });
+            }
+        } catch {
+            return res.status(400).json({ error: 'Invalid URL' });
+        }
+
+        try {
+            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true, verbatim: true });
+
+            for (const address of lookup) {
+                if (isPrivateIP(address.address)) {
+                    console.warn(`Blocked SSRF attempt to ${address.address}`);
+                    return res.status(403).json({ error: 'Destination not allowed' });
+                }
+            }
+
+            const targetIp = lookup[0].address;
+            const targetUrl = new URL(playlistUrl);
+
+            if (lookup[0].family === 6) {
+                targetUrl.hostname = `[${targetIp}]`;
+            } else {
+                targetUrl.hostname = targetIp;
+            }
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(targetUrl.toString(), {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Host': urlObj.hostname
+                }
+            });
+
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
+            }
+
+            const body = await response.text();
+
+            if (body.length > 10 * 1024 * 1024) {
+                return res.status(400).json({ error: 'Playlist too large (>10MB)' });
+            }
+
+            if (!body.trim().startsWith('#EXTM3U')) {
+                return res.status(400).json({ error: 'Response is not a valid M3U playlist' });
+            }
+
+            const parsed = parseM3U(body);
+
+            if (parsed.channels.length === 0) {
+                return res.status(400).json({ error: 'No channels found in playlist' });
+            }
+
+            playlistCache.set(roomId, {
+                channels: parsed.channels,
+                streamUrls: parsed.streamUrls,
+                groups: parsed.groups,
+                fetchedAt: Date.now(),
+                sourceUrl: playlistUrl
+            });
+
+            console.log(`Playlist loaded for room ${roomId}: ${parsed.channels.length} channels in ${Object.keys(parsed.groups).length} groups`);
+
+            res.json({
+                channelCount: parsed.channels.length,
+                groups: Object.keys(parsed.groups).sort().map(groupName => ({
+                    name: groupName,
+                    channels: parsed.groups[groupName].map(idx => parsed.channels[idx])
+                }))
+            });
+
+        } catch (err) {
+            const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
+            console.error(`Playlist fetch failed: ${err.message}${causeMsg}`);
+            res.status(500).json({ error: `Failed to fetch playlist: ${err.message}${causeMsg}` });
         }
     });
 
@@ -1030,6 +1187,7 @@ app.set('io', io);
 const rooms = new Map();
 const users = new Map();
 const activeStreams = new Map();
+const playlistCache = new Map();
 
 const ROOM_INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 const ROOM_CLEANUP_INTERVAL = 60 * 1000;
@@ -1582,9 +1740,27 @@ async function cleanupInactiveRooms() {
             }
         }
 
+        const streamInfo = activeStreams.get(roomId);
+        if (streamInfo) {
+            streamInfo.isActive = false;
+            streamInfo.controller.abort();
+            activeStreams.delete(roomId);
+            console.log(`Cleaned up stream relay for room ${roomId}`);
+        }
+
+        playlistCache.delete(roomId);
+
         rooms.delete(roomId);
         console.log(`Cleaned up inactive room: ${roomId}`);
     }
+
+    const playlistMaxAge = 6 * 60 * 60 * 1000;
+    playlistCache.forEach((data, roomId) => {
+        if (Date.now() - data.fetchedAt > playlistMaxAge) {
+            playlistCache.delete(roomId);
+            console.log(`Playlist cache expired for room ${roomId}`);
+        }
+    });
 }
 
 setInterval(cleanupInactiveRooms, ROOM_CLEANUP_INTERVAL);

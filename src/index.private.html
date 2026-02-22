@@ -267,6 +267,16 @@
                                     Play Stream</button>
                             </div>
                             <hr class="border-white/5">
+                            <div>
+                                <label class="block text-[10px] font-bold text-amber-400 mb-1">IPTV PLAYLIST</label>
+                                <input type="text" id="iptvPlaylistInput" placeholder="http://host/get.php?username=...&type=m3u_plus"
+                                    class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-amber-500 outline-none">
+                                <button id="loadPlaylistBtn"
+                                    class="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30 text-xs py-1.5 rounded transition">
+                                    Load Playlist</button>
+                                <div id="iptvBrowser" class="hidden mt-2"></div>
+                            </div>
+                            <hr class="border-white/5">
                             <details class="group">
                                 <summary
                                     class="cursor-pointer text-xs text-slate-400 hover:text-white flex justify-between">

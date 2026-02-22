@@ -19,10 +19,12 @@ const subtitleManager = new SubtitleManager();
 const fileLibraryManager = new FileLibraryManager();
 
 let torrentManager = null;
+let iptvManager = null;
 
 export {
     roomManager, socketManager, videoPlayer, mediaManager,
-    authManager, uiManager, subtitleManager, torrentManager, fileLibraryManager
+    authManager, uiManager, subtitleManager, torrentManager, fileLibraryManager,
+    iptvManager
 };
 
 setupPopStateHandler(roomManager);
@@ -40,6 +42,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             torrentManager = new TorrentManager();
         } catch (error) {
             console.error('Failed to load TorrentManager:', error);
+        }
+        try {
+            const { IptvManager } = await import('./modules/iptvManager.js');
+            iptvManager = new IptvManager();
+        } catch (error) {
+            console.error('Failed to load IptvManager:', error);
         }
     }
 
@@ -145,6 +153,9 @@ function setupUIEventListeners() {
     if (config.ENABLE_TORRENTS) {
         if (torrentManager) {
             addListener('loadTorrentBtn', () => torrentManager.loadTorrent());
+        }
+        if (iptvManager) {
+            addListener('loadPlaylistBtn', () => iptvManager.loadPlaylist());
         }
         addListener('loadStreamBtn', () => mediaManager.loadStream());
     }

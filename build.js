@@ -82,8 +82,8 @@ function buildPublic() {
     copyFile('src/js/state.js', path.join(dest, 'js', 'state.js'));
     copyFile('src/js/main.js', path.join(dest, 'js', 'main.js'), 'main.js');
 
-    console.log('\n  Modules (excluding torrentManager.js):');
-    copyDir('src/js/modules', path.join(dest, 'js', 'modules'), ['torrentManager.js']);
+    console.log('\n  Modules (excluding torrentManager.js, iptvManager.js):');
+    copyDir('src/js/modules', path.join(dest, 'js', 'modules'), ['torrentManager.js', 'iptvManager.js']);
 
     console.log('\n  ✅ Public build complete\n');
 }
@@ -140,6 +140,14 @@ function verify() {
         passed = false;
     } else {
         console.log('  ✓ PRIVATE includes torrentManager.js');
+    }
+
+    const publicIptv = path.join('public', 'js', 'modules', 'iptvManager.js');
+    if (fs.existsSync(publicIptv)) {
+        console.log('  ❌ PUBLIC has iptvManager.js');
+        passed = false;
+    } else {
+        console.log('  ✓ PUBLIC clean (no iptvManager.js)');
     }
 
     // Verify public HTML has no torrent UI
