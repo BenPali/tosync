@@ -14,6 +14,7 @@ import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { fileTypeFromBuffer } from 'file-type';
 import dns from 'dns';
+import ptt from 'parse-torrent-title';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -305,6 +306,25 @@ const subtitleUpload = multer({
 });
 
 if (ENABLE_TORRENTS) {
+    const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'];
+
+    function parseFileInfo(file, index) {
+        const parsed = ptt.parse(file.name);
+        // Fallback for anime-style " - 03 - " patterns ptt misses
+        if (parsed.season == null && parsed.episode == null) {
+            const m = file.name.match(/\s-\s(\d{2,3})\s-\s/);
+            if (m) parsed.episode = parseInt(m[1]);
+        }
+        return {
+            index,
+            name: file.name,
+            length: file.length,
+            title: parsed.title || null,
+            season: parsed.season ?? null,
+            episode: parsed.episode ?? null,
+        };
+    }
+
     app.get('/api/torrents/auth-check', requireAdmin, (req, res) => {
         res.json({ authorized: true, username: req.session.username });
     });
@@ -335,11 +355,11 @@ if (ENABLE_TORRENTS) {
                     return res.json({
                         infoHash: existingTorrent.infoHash,
                         name: existingTorrent.name || 'Unknown',
-                        files: existingTorrent.files.map((f, i) => ({
-                            name: f.name,
-                            length: f.length,
-                            index: i
-                        }))
+                        files: existingTorrent.files
+                            .map((f, i) => ({ file: f, index: i }))
+                            .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()))
+                            .map(({ file, index }) => parseFileInfo(file, index)),
+                        totalLength: existingTorrent.length || 0
                     });
                 }
             }
@@ -374,21 +394,16 @@ if (ENABLE_TORRENTS) {
                 addedAt: Date.now()
             });
 
-            const videoFiles = torrent.files.filter(file => {
-                const ext = path.extname(file.name).toLowerCase();
-                return ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m4v'].includes(ext);
-            });
+            const videoFiles = torrent.files
+                .map((f, i) => ({ file: f, index: i }))
+                .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
 
             console.log(`Torrent added: ${torrent.name}`);
 
             res.json({
                 infoHash: torrent.infoHash,
                 name: torrent.name || 'Unknown',
-                files: videoFiles.map(f => ({
-                    name: f.name,
-                    length: f.length,
-                    index: torrent.files.indexOf(f)
-                })),
+                files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
                 totalLength: torrent.length || 0
             });
 
@@ -413,8 +428,43 @@ if (ENABLE_TORRENTS) {
             uploadSpeed: torrent.uploadSpeed,
             numPeers: torrent.numPeers,
             downloaded: torrent.downloaded,
-            done: torrent.done
+            done: torrent.done,
+            files: torrent.files
+                .map((f, i) => ({ file: f, index: i }))
+                .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()))
+                .map(({ file, index }) => ({ ...parseFileInfo(file, index), downloaded: file.downloaded, progress: file.progress, done: file.done }))
         });
+    });
+
+    app.post('/api/torrents/:infoHash/files/:fileIndex/select', requireAdmin, (req, res) => {
+        const torrentInfo = activeTorrents.get(req.params.infoHash);
+        if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
+
+        const file = torrentInfo.torrent.files[parseInt(req.params.fileIndex)];
+        if (!file) return res.status(404).json({ error: 'File not found' });
+
+        file.select();
+        res.json({ index: parseInt(req.params.fileIndex), name: file.name, progress: file.progress, done: file.done });
+    });
+
+    app.post('/api/torrents/:infoHash/files/:fileIndex/deselect', requireAdmin, (req, res) => {
+        const torrentInfo = activeTorrents.get(req.params.infoHash);
+        if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
+
+        const file = torrentInfo.torrent.files[parseInt(req.params.fileIndex)];
+        if (!file) return res.status(404).json({ error: 'File not found' });
+
+        file.deselect();
+        res.json({ index: parseInt(req.params.fileIndex), name: file.name, progress: file.progress, done: file.done });
+    });
+
+    app.delete('/api/torrents/:infoHash', requireAdmin, (req, res) => {
+        const torrentInfo = activeTorrents.get(req.params.infoHash);
+        if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
+
+        torrentInfo.torrent.destroy();
+        activeTorrents.delete(req.params.infoHash);
+        res.json({ ok: true });
     });
 
     app.get('/api/torrents/:infoHash/files/:fileIndex/stream', (req, res) => {
@@ -876,6 +926,23 @@ if (ENABLE_TORRENTS) {
             console.error(`Playlist fetch failed: ${err.message}${causeMsg}`);
             res.status(500).json({ error: `Failed to fetch playlist: ${err.message}${causeMsg}` });
         }
+    });
+
+    app.get('/api/stream/playlist/:roomId/groups', requireAdmin, (req, res) => {
+        const { roomId } = req.params;
+        const playlist = playlistCache.get(roomId);
+
+        if (!playlist) {
+            return res.status(404).json({ error: 'No playlist loaded' });
+        }
+
+        res.json({
+            channelCount: playlist.channels.length,
+            groups: Object.keys(playlist.groups).sort().map(groupName => ({
+                name: groupName,
+                count: playlist.groups[groupName].length
+            }))
+        });
     });
 
     app.get('/api/stream/playlist/:roomId/group', requireAdmin, (req, res) => {

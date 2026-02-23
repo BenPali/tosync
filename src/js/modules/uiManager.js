@@ -107,7 +107,7 @@ export class UIManager {
             }
 
             if (user.name === state.userName || user.id === state.socket?.id) {
-                classes += 'ring-1 ring-blue-500 font-bold ';
+                classes += 'font-bold ';
             }
 
             userItem.className = classes;

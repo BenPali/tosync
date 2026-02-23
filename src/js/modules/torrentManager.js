@@ -2,7 +2,19 @@ import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, subtitleManager, uiManager } from '../main.js';
 
+function buildEpisodeLabel(file) {
+    if (file.episode == null) return file.name.replace(/\.[^.]+$/, '');
+    const ep = String(file.episode).padStart(2, '0');
+    const prefix = file.season != null ? `S${String(file.season).padStart(2, '0')}E${ep}` : `E${ep}`;
+    return file.title ? `${prefix} - ${file.title}` : prefix;
+}
+
 export class TorrentManager {
+    constructor() {
+        this._playingFileIndex = null;
+        this._lastFilesStatus = null;
+    }
+
     async loadTorrent() {
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can load torrents');
@@ -24,7 +36,7 @@ export class TorrentManager {
             return;
         }
 
-        uiManager.updateMediaStatus('🧲 Processing magnet link...');
+        uiManager.updateMediaStatus('Processing magnet link...');
 
         try {
             const response = await fetch('/api/torrents/add', {
@@ -58,7 +70,7 @@ export class TorrentManager {
                 const firstFile = torrentData.files[0];
                 this.playTorrentFile(torrentData.infoHash, firstFile.index, firstFile.name);
             } else if (torrentData.files.length > 1) {
-                uiManager.updateMediaStatus(`${torrentData.files.length} files found — select one to play`);
+                uiManager.updateMediaStatus(`${torrentData.files.length} files found`);
             }
 
             this.updateTorrentProgressFromServer();
@@ -74,6 +86,9 @@ export class TorrentManager {
             uiManager.showError('Only admins can select files');
             return;
         }
+
+        this._playingFileIndex = fileIndex;
+        this._updateFileRowStates();
 
         const socketId = state.socket ? state.socket.id : '';
         const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream?socketId=${socketId}`;
@@ -109,42 +124,260 @@ export class TorrentManager {
         };
     }
 
+    // -- File picker UI --
+
     displayTorrentFiles(files) {
         const fileList = document.getElementById('fileList');
         if (!fileList) return;
-
-        fileList.innerHTML = '<h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Available Files</h4>';
+        fileList.innerHTML = '';
 
         if (files.length === 0) {
-            fileList.innerHTML += '<p class="text-xs text-slate-600 italic">No video files found.</p>';
+            fileList.innerHTML = '<p class="text-xs text-slate-600 italic">No video files found.</p>';
             return;
         }
 
-        files.forEach((file) => {
-            const fileItem = document.createElement('div');
-            let classes = 'flex justify-between items-center p-2 border-b border-white/5 hover:bg-white/5 transition text-xs text-slate-300 ';
+        const isAdmin = state.userRole === 'admin';
+        const hasSeason = files.some(f => f.season != null);
 
-            if (state.userRole === 'guest') {
-                classes += 'opacity-50 cursor-not-allowed ';
-            } else {
-                classes += 'cursor-pointer ';
+        if (hasSeason) {
+            const seasons = new Map();
+            for (const f of files) {
+                const s = f.season ?? 0;
+                if (!seasons.has(s)) seasons.set(s, []);
+                seasons.get(s).push(f);
+            }
+            const sorted = [...seasons.entries()].sort((a, b) => a[0] - b[0]);
+            for (const [season, items] of sorted) {
+                items.sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0));
+                const details = document.createElement('details');
+                details.className = 'group';
+                if (sorted.length === 1) details.open = true;
+
+                const summary = document.createElement('summary');
+                summary.className = 'cursor-pointer text-xs font-bold text-slate-400 hover:text-white flex justify-between items-center p-2 select-none';
+                summary.innerHTML = `<span>${season === 0 ? 'Other Files' : `Season ${season}`}</span><span class="text-slate-600 text-[10px]">${items.length} ep</span>`;
+                details.appendChild(summary);
+
+                const list = document.createElement('div');
+                list.className = 'space-y-0.5 pb-1';
+                for (const f of items) list.appendChild(this._createFileRow(f, isAdmin));
+                details.appendChild(list);
+                fileList.appendChild(details);
+            }
+        } else {
+            const sorted = [...files].sort((a, b) => {
+                if (a.episode != null && b.episode != null) return a.episode - b.episode;
+                if (a.episode != null) return -1;
+                if (b.episode != null) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            for (const f of sorted) fileList.appendChild(this._createFileRow(f, isAdmin));
+        }
+    }
+
+    _createFileRow(file, isAdmin) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 p-2 rounded hover:bg-white/5 transition text-xs group';
+        row.dataset.fileIndex = file.index;
+
+        const label = document.createElement('span');
+        label.className = 'truncate flex-1 text-slate-300 min-w-0';
+        label.textContent = buildEpisodeLabel(file);
+        label.title = file.name;
+
+        const size = document.createElement('span');
+        size.className = 'text-slate-600 whitespace-nowrap text-[10px] shrink-0';
+        size.textContent = uiManager.formatBytes(file.length);
+
+        const progressWrap = document.createElement('div');
+        progressWrap.className = 'hidden w-16 h-1 bg-slate-700 rounded overflow-hidden shrink-0';
+        progressWrap.dataset.role = 'progress-wrap';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'h-full bg-emerald-500 transition-all duration-300';
+        progressBar.style.width = '0%';
+        progressBar.dataset.role = 'progress-bar';
+        progressWrap.appendChild(progressBar);
+
+        const statusText = document.createElement('span');
+        statusText.className = 'hidden text-[10px] whitespace-nowrap shrink-0';
+        statusText.dataset.role = 'status';
+
+        const buttons = document.createElement('div');
+        buttons.className = 'flex gap-1 shrink-0';
+
+        if (isAdmin) {
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'px-2 py-0.5 rounded text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 transition';
+            dlBtn.textContent = 'DL';
+            dlBtn.title = 'Download without playing';
+            dlBtn.dataset.role = 'dl-btn';
+            dlBtn.onclick = (e) => { e.stopPropagation(); this._selectFile(file.index); };
+
+            const playBtn = document.createElement('button');
+            playBtn.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-400 transition';
+            playBtn.textContent = 'Play';
+            playBtn.dataset.role = 'play-btn';
+            playBtn.onclick = (e) => { e.stopPropagation(); this.playTorrentFile(state.currentTorrentInfo.infoHash, file.index, file.name); };
+
+            const stopBtn = document.createElement('button');
+            stopBtn.className = 'hidden px-2 py-0.5 rounded text-[10px] bg-red-600/30 hover:bg-red-600/50 text-red-400 transition';
+            stopBtn.textContent = 'Stop';
+            stopBtn.dataset.role = 'stop-btn';
+            stopBtn.onclick = (e) => { e.stopPropagation(); this._deselectFile(file.index); };
+
+            buttons.appendChild(dlBtn);
+            buttons.appendChild(playBtn);
+            buttons.appendChild(stopBtn);
+        } else {
+            const badge = document.createElement('span');
+            badge.className = 'text-[10px] text-slate-600';
+            badge.textContent = 'view only';
+            buttons.appendChild(badge);
+        }
+
+        row.appendChild(label);
+        row.appendChild(size);
+        row.appendChild(progressWrap);
+        row.appendChild(statusText);
+        row.appendChild(buttons);
+        return row;
+    }
+
+    // -- File download controls --
+
+    async _selectFile(fileIndex) {
+        if (!state.currentTorrentInfo) return;
+        try {
+            await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/select`, {
+                method: 'POST', credentials: 'include'
+            });
+        } catch (e) {
+            console.error('Failed to select file:', e);
+        }
+    }
+
+    async _deselectFile(fileIndex) {
+        if (!state.currentTorrentInfo) return;
+        try {
+            await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/deselect`, {
+                method: 'POST', credentials: 'include'
+            });
+            if (this._playingFileIndex === fileIndex) {
+                this._playingFileIndex = null;
+                state.videoPlayer.src = '';
+                state.videoPlayer.load();
+                uiManager.updateMediaStatus('Playback stopped');
+                this._updateFileRowStates();
+            }
+        } catch (e) {
+            console.error('Failed to deselect file:', e);
+        }
+    }
+
+    async removeTorrent() {
+        if (state.userRole !== 'admin' || !state.currentTorrentInfo) return;
+        try {
+            await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}`, {
+                method: 'DELETE', credentials: 'include'
+            });
+            this._playingFileIndex = null;
+            this._lastFilesStatus = null;
+            this.clearTorrentProgress();
+            state.currentTorrentInfo = null;
+            state.videoPlayer.src = '';
+            state.videoPlayer.load();
+
+            socketManager.broadcastMediaAction('clear-media', {});
+
+            const infoBox = document.getElementById('torrentInfo');
+            if (infoBox) infoBox.classList.add('hidden');
+
+            uiManager.updateMediaStatus('Torrent removed');
+        } catch (e) {
+            console.error('Failed to remove torrent:', e);
+            uiManager.showError('Failed to remove torrent');
+        }
+    }
+
+    // -- Progress tracking --
+
+    _updateFileRowStates(filesStatus) {
+        if (filesStatus) this._lastFilesStatus = filesStatus;
+        const status = filesStatus || this._lastFilesStatus;
+
+        const fileList = document.getElementById('fileList');
+        if (!fileList) return;
+
+        const rows = fileList.querySelectorAll('[data-file-index]');
+        for (const row of rows) {
+            const idx = parseInt(row.dataset.fileIndex);
+            const fs = status?.find(f => f.index === idx);
+            const progress = fs ? fs.progress : 0;
+            const done = fs ? fs.done : false;
+            const isDownloading = progress > 0 && !done;
+            const isPlaying = this._playingFileIndex === idx;
+
+            // Highlight playing row
+            const label = row.querySelector('.truncate');
+            if (label) {
+                label.className = isPlaying
+                    ? 'truncate flex-1 text-emerald-400 font-bold min-w-0'
+                    : 'truncate flex-1 text-slate-300 min-w-0';
             }
 
-            fileItem.className = classes;
-
-            fileItem.innerHTML = `
-                <span class="truncate mr-2">${file.name}</span>
-                <span class="text-slate-500 whitespace-nowrap">${uiManager.formatBytes(file.length)}</span>
-            `;
-
-            if (state.userRole === 'admin') {
-                fileItem.onclick = () => this.playTorrentFile(state.currentTorrentInfo.infoHash, file.index, file.name);
-            } else {
-                fileItem.title = 'Only admins can select files';
+            // Progress bar
+            const progressWrap = row.querySelector('[data-role="progress-wrap"]');
+            const progressBar = row.querySelector('[data-role="progress-bar"]');
+            if (progressWrap && progressBar) {
+                if (isDownloading) {
+                    progressWrap.classList.remove('hidden');
+                    progressBar.style.width = Math.round(progress * 100) + '%';
+                } else {
+                    progressWrap.classList.add('hidden');
+                }
             }
 
-            fileList.appendChild(fileItem);
-        });
+            // Status text
+            const statusEl = row.querySelector('[data-role="status"]');
+            if (statusEl) {
+                if (done) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.className = 'text-[10px] whitespace-nowrap shrink-0 text-emerald-500';
+                    statusEl.textContent = 'done';
+                } else if (isDownloading) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.className = 'text-[10px] whitespace-nowrap shrink-0 text-amber-400';
+                    statusEl.textContent = Math.round(progress * 100) + '%';
+                } else {
+                    statusEl.classList.add('hidden');
+                }
+            }
+
+            // Button visibility
+            const dlBtn = row.querySelector('[data-role="dl-btn"]');
+            const playBtn = row.querySelector('[data-role="play-btn"]');
+            const stopBtn = row.querySelector('[data-role="stop-btn"]');
+            if (dlBtn && playBtn && stopBtn) {
+                if (isPlaying) {
+                    dlBtn.classList.add('hidden');
+                    playBtn.classList.add('hidden');
+                    stopBtn.classList.remove('hidden');
+                } else if (isDownloading) {
+                    dlBtn.classList.add('hidden');
+                    playBtn.classList.remove('hidden');
+                    stopBtn.classList.remove('hidden');
+                } else if (done) {
+                    dlBtn.classList.add('hidden');
+                    playBtn.classList.remove('hidden');
+                    stopBtn.classList.add('hidden');
+                } else {
+                    // idle
+                    dlBtn.classList.remove('hidden');
+                    playBtn.classList.remove('hidden');
+                    stopBtn.classList.add('hidden');
+                }
+            }
+        }
     }
 
     async updateTorrentProgressFromServer() {
@@ -159,6 +392,7 @@ export class TorrentManager {
 
                 const status = await response.json();
                 this.updateTorrentProgressUI(status);
+                this._updateFileRowStates(status.files);
 
                 if (state.userRole === 'admin' && state.socket && state.isConnected) {
                     state.socket.emit('torrent-status', status);
@@ -186,14 +420,6 @@ export class TorrentManager {
 
         const peers = document.getElementById('numPeers');
         if (peers) peers.textContent = `${status.numPeers}`;
-
-        if (status.numPeers === 0 && progress < 100) {
-            uiManager.updateMediaStatus(`🔍 Searching for peers... (${progress}%)`);
-        } else if (progress < 100) {
-            uiManager.updateMediaStatus(`⬇️ Downloading: ${status.name} (${progress}%, ${uiManager.formatBytes(status.downloadSpeed)}/s)`);
-        } else {
-            uiManager.updateMediaStatus(`✅ Complete: ${status.name} (Seeding to ${status.numPeers})`);
-        }
     }
 
     clearTorrentProgress() {

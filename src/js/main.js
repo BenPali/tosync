@@ -154,6 +154,7 @@ function setupUIEventListeners() {
     if (config.ENABLE_TORRENTS) {
         if (torrentManager) {
             addListener('loadTorrentBtn', () => torrentManager.loadTorrent());
+            addListener('removeTorrentBtn', () => torrentManager.removeTorrent());
         }
         if (iptvManager) {
             addListener('loadPlaylistBtn', () => iptvManager.loadPlaylist());
