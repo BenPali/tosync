@@ -408,8 +408,8 @@ if (ENABLE_TORRENTS) {
             });
 
         } catch (error) {
-            console.error('Torrent operation failed');
-            res.status(500).json({ error: 'Failed to add torrent' });
+            console.error('Torrent operation failed:', error.message);
+            res.status(500).json({ error: error.message || 'Failed to add torrent' });
         }
     });
 
