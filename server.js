@@ -367,7 +367,8 @@ if (ENABLE_TORRENTS) {
             const { videosDir } = ensureRoomDirectories(roomId);
             const torrent = torrentClient.add(magnetLink, {
                 path: videosDir,
-                strategy: 'sequential'
+                strategy: 'sequential',
+                deselect: true
             });
 
             await new Promise((resolve, reject) => {
@@ -378,7 +379,6 @@ if (ENABLE_TORRENTS) {
 
                 torrent.once('ready', () => {
                     clearTimeout(timeout);
-                    torrent.files.forEach(f => f.deselect());
                     resolve();
                 });
 

@@ -247,6 +247,12 @@ export class TorrentManager {
 
     async _selectFile(fileIndex) {
         if (!state.currentTorrentInfo) return;
+        // Instant feedback: mark as downloading in cached status
+        if (this._lastFilesStatus) {
+            const f = this._lastFilesStatus.find(f => f.index === fileIndex);
+            if (f && !f.done) { f.progress = Math.max(f.progress, 0.01); }
+        }
+        this._updateFileRowStates();
         try {
             await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/select`, {
                 method: 'POST', credentials: 'include'
@@ -258,6 +264,11 @@ export class TorrentManager {
 
     async _deselectFile(fileIndex) {
         if (!state.currentTorrentInfo) return;
+        // Instant feedback: reset progress in cached status
+        if (this._lastFilesStatus) {
+            const f = this._lastFilesStatus.find(f => f.index === fileIndex);
+            if (f) { f.progress = 0; f.done = false; }
+        }
         try {
             await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/deselect`, {
                 method: 'POST', credentials: 'include'
@@ -267,11 +278,11 @@ export class TorrentManager {
                 state.videoPlayer.src = '';
                 state.videoPlayer.load();
                 uiManager.updateMediaStatus('Playback stopped');
-                this._updateFileRowStates();
             }
         } catch (e) {
             console.error('Failed to deselect file:', e);
         }
+        this._updateFileRowStates();
     }
 
     async removeTorrent() {
@@ -308,10 +319,14 @@ export class TorrentManager {
         const fileList = document.getElementById('fileList');
         if (!fileList) return;
 
+        // Build lookup map once instead of .find() per row
+        const statusMap = new Map();
+        if (status) for (const f of status) statusMap.set(f.index, f);
+
         const rows = fileList.querySelectorAll('[data-file-index]');
         for (const row of rows) {
             const idx = parseInt(row.dataset.fileIndex);
-            const fs = status?.find(f => f.index === idx);
+            const fs = statusMap.get(idx);
             const progress = fs ? fs.progress : 0;
             const done = fs ? fs.done : false;
             const isDownloading = progress > 0 && !done;
