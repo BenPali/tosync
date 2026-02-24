@@ -362,7 +362,11 @@ if (ENABLE_TORRENTS) {
                 }
 
                 // Orphaned torrent (e.g. from incomplete destroy) — clean it up
-                await new Promise(resolve => existingTorrent.destroy({ destroyStore: false }, resolve));
+                try {
+                    torrentClient.remove(magnetLink);
+                } catch (e) {
+                    console.error('Failed to remove orphaned torrent:', e.message);
+                }
             }
 
             const { videosDir } = ensureRoomDirectories(roomId);
