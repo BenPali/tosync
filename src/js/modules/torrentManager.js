@@ -247,10 +247,10 @@ export class TorrentManager {
 
     async _selectFile(fileIndex) {
         if (!state.currentTorrentInfo) return;
-        // Instant feedback: mark as downloading in cached status
+        // Instant feedback: mark as selected in cached status
         if (this._lastFilesStatus) {
             const f = this._lastFilesStatus.find(f => f.index === fileIndex);
-            if (f && !f.done) { f.progress = Math.max(f.progress, 0.01); }
+            if (f) f.selected = true;
         }
         this._updateFileRowStates();
         try {
@@ -264,10 +264,10 @@ export class TorrentManager {
 
     async _deselectFile(fileIndex) {
         if (!state.currentTorrentInfo) return;
-        // Instant feedback: reset progress in cached status
+        // Instant feedback: mark as deselected in cached status
         if (this._lastFilesStatus) {
             const f = this._lastFilesStatus.find(f => f.index === fileIndex);
-            if (f) { f.progress = 0; f.done = false; }
+            if (f) f.selected = false;
         }
         try {
             await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/deselect`, {
@@ -329,7 +329,8 @@ export class TorrentManager {
             const fs = statusMap.get(idx);
             const progress = fs ? fs.progress : 0;
             const done = fs ? fs.done : false;
-            const isDownloading = progress > 0 && !done;
+            const isSelected = fs ? !!fs.selected : false;
+            const isDownloading = isSelected && !done;
             const isPlaying = this._playingFileIndex === idx;
 
             // Highlight playing row
@@ -344,12 +345,8 @@ export class TorrentManager {
             const progressWrap = row.querySelector('[data-role="progress-wrap"]');
             const progressBar = row.querySelector('[data-role="progress-bar"]');
             if (progressWrap && progressBar) {
-                if (isDownloading) {
-                    progressWrap.classList.remove('hidden');
-                    progressBar.style.width = Math.round(progress * 100) + '%';
-                } else {
-                    progressWrap.classList.add('hidden');
-                }
+                progressWrap.classList.toggle('hidden', !isDownloading);
+                if (isDownloading) progressBar.style.width = Math.round(progress * 100) + '%';
             }
 
             // Status text

@@ -392,7 +392,8 @@ if (ENABLE_TORRENTS) {
             activeTorrents.set(torrent.infoHash, {
                 torrent,
                 roomId,
-                addedAt: Date.now()
+                addedAt: Date.now(),
+                selectedFiles: new Set()
             });
 
             const videoFiles = torrent.files
@@ -420,7 +421,7 @@ if (ENABLE_TORRENTS) {
             return res.status(404).json({ error: 'Torrent not found' });
         }
 
-        const { torrent } = torrentInfo;
+        const { torrent, selectedFiles } = torrentInfo;
         res.json({
             infoHash: torrent.infoHash,
             name: torrent.name,
@@ -433,7 +434,7 @@ if (ENABLE_TORRENTS) {
             files: torrent.files
                 .map((f, i) => ({ file: f, index: i }))
                 .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()))
-                .map(({ file, index }) => ({ ...parseFileInfo(file, index), downloaded: file.downloaded, progress: file.progress, done: file.done }))
+                .map(({ file, index }) => ({ ...parseFileInfo(file, index), downloaded: file.downloaded, progress: file.progress, done: file.done, selected: selectedFiles.has(index) }))
         });
     });
 
@@ -444,9 +445,11 @@ if (ENABLE_TORRENTS) {
         const file = torrentInfo.torrent.files[parseInt(req.params.fileIndex)];
         if (!file) return res.status(404).json({ error: 'File not found' });
 
+        const idx = parseInt(req.params.fileIndex);
         file.select();
+        torrentInfo.selectedFiles.add(idx);
         if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
-        res.json({ index: parseInt(req.params.fileIndex), name: file.name, progress: file.progress, done: file.done });
+        res.json({ index: idx, name: file.name, progress: file.progress, done: file.done });
     });
 
     app.post('/api/torrents/:infoHash/files/:fileIndex/deselect', requireAdmin, (req, res) => {
@@ -456,15 +459,17 @@ if (ENABLE_TORRENTS) {
         const file = torrentInfo.torrent.files[parseInt(req.params.fileIndex)];
         if (!file) return res.status(404).json({ error: 'File not found' });
 
+        const idx = parseInt(req.params.fileIndex);
         file.deselect();
-        res.json({ index: parseInt(req.params.fileIndex), name: file.name, progress: file.progress, done: file.done });
+        torrentInfo.selectedFiles.delete(idx);
+        res.json({ index: idx, name: file.name, progress: file.progress, done: file.done });
     });
 
     app.delete('/api/torrents/:infoHash', requireAdmin, (req, res) => {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
-        torrentInfo.torrent.destroy();
+        torrentInfo.torrent.destroy({ destroyStore: true });
         activeTorrents.delete(req.params.infoHash);
         res.json({ ok: true });
     });
