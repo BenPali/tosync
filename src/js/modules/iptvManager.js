@@ -11,6 +11,19 @@ export class IptvManager {
         this.searchTimeout = null;
     }
 
+    async restoreIfCached() {
+        if (!state.currentRoomId || this.currentPlaylist) return;
+        try {
+            const response = await fetch(`/api/stream/playlist/${state.currentRoomId}/groups`, { credentials: 'include' });
+            if (!response.ok) return;
+            const data = await response.json();
+            this.currentPlaylist = data;
+            this.displayChannelBrowser(data.groups);
+        } catch (e) {
+            // No cached playlist — nothing to restore
+        }
+    }
+
     async loadPlaylist() {
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can load playlists');

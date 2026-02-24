@@ -341,28 +341,26 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const existing = torrentClient.get(magnetLink);
-            if (existing && existing.infoHash) {
-                if (!activeTorrents.has(existing.infoHash)) {
-                    activeTorrents.set(existing.infoHash, {
-                        torrent: existing,
-                        roomId,
-                        addedAt: Date.now(),
-                        selectedFiles: new Set()
+            // Check activeTorrents by infoHash parsed from magnet (torrentClient.get() is unreliable)
+            const hashMatch = magnetLink.match(/btih:([a-fA-F0-9]{40})/i);
+            if (hashMatch) {
+                const infoHash = hashMatch[1].toLowerCase();
+                const tracked = activeTorrents.get(infoHash);
+                if (tracked) {
+                    const t = tracked.torrent;
+                    if (!t.ready) {
+                        await new Promise(resolve => t.once('ready', resolve));
+                    }
+                    const videoFiles = t.files
+                        .map((f, i) => ({ file: f, index: i }))
+                        .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
+                    return res.json({
+                        infoHash: t.infoHash,
+                        name: t.name || 'Unknown',
+                        files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
+                        totalLength: t.length || 0
                     });
                 }
-                if (!existing.ready) {
-                    await new Promise(resolve => existing.once('ready', resolve));
-                }
-                const videoFiles = existing.files
-                    .map((f, i) => ({ file: f, index: i }))
-                    .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
-                return res.json({
-                    infoHash: existing.infoHash,
-                    name: existing.name || 'Unknown',
-                    files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
-                    totalLength: existing.length || 0
-                });
             }
 
             const { videosDir } = ensureRoomDirectories(roomId);
@@ -411,31 +409,6 @@ if (ENABLE_TORRENTS) {
             });
 
         } catch (error) {
-            if (error.message && error.message.includes('duplicate')) {
-                const retry = torrentClient.get(magnetLink);
-                if (retry && retry.infoHash) {
-                    if (!activeTorrents.has(retry.infoHash)) {
-                        activeTorrents.set(retry.infoHash, {
-                            torrent: retry,
-                            roomId,
-                            addedAt: Date.now(),
-                            selectedFiles: new Set()
-                        });
-                    }
-                    if (!retry.ready) {
-                        await new Promise(resolve => retry.once('ready', resolve));
-                    }
-                    const videoFiles = retry.files
-                        .map((f, i) => ({ file: f, index: i }))
-                        .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
-                    return res.json({
-                        infoHash: retry.infoHash,
-                        name: retry.name || 'Unknown',
-                        files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
-                        totalLength: retry.length || 0
-                    });
-                }
-            }
             console.error('Torrent operation failed:', error.message);
             res.status(500).json({ error: error.message || 'Failed to add torrent' });
         }

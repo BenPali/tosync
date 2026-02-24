@@ -1,7 +1,7 @@
 // modules/authManager.js - Authentication and role management
 
 import { state } from '../state.js';
-import { socketManager, videoPlayer, torrentManager, uiManager } from '../main.js';
+import { socketManager, videoPlayer, torrentManager, iptvManager, uiManager } from '../main.js';
 
 export class AuthManager {
     setRole(role, name) {
@@ -63,6 +63,19 @@ export class AuthManager {
             // You are now the admin
             state.userRole = 'admin';
             this.updateUIForRole('admin', state.userName);
+
+            // Restore torrent UI if a torrent is active
+            if (state.currentTorrentInfo && torrentManager) {
+                const info = document.getElementById('torrentInfo');
+                if (info) info.classList.remove('hidden');
+                torrentManager.displayTorrentFiles(state.currentTorrentInfo.files);
+                torrentManager.updateTorrentProgressFromServer();
+            }
+
+            // Restore IPTV browser if a playlist was loaded
+            if (iptvManager) {
+                iptvManager.restoreIfCached();
+            }
 
             if (reason === 'admin-left') {
                 uiManager.updateLastAction(`You are now the admin (${formerAdminName} left)`);
