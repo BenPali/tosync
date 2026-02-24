@@ -88,7 +88,7 @@ export class TorrentManager {
         }
 
         this._playingFileIndex = fileIndex;
-        this._updateFileRowStates();
+        this._selectFile(fileIndex);
 
         const socketId = state.socket ? state.socket.id : '';
         const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream?socketId=${socketId}`;
@@ -368,29 +368,14 @@ export class TorrentManager {
                 }
             }
 
-            // Button visibility
+            // Button visibility: Play always visible (hidden only if playing), DL always visible, Stop when active
             const dlBtn = row.querySelector('[data-role="dl-btn"]');
             const playBtn = row.querySelector('[data-role="play-btn"]');
             const stopBtn = row.querySelector('[data-role="stop-btn"]');
             if (dlBtn && playBtn && stopBtn) {
-                if (isPlaying) {
-                    dlBtn.classList.add('hidden');
-                    playBtn.classList.add('hidden');
-                    stopBtn.classList.remove('hidden');
-                } else if (isDownloading) {
-                    dlBtn.classList.add('hidden');
-                    playBtn.classList.remove('hidden');
-                    stopBtn.classList.remove('hidden');
-                } else if (done) {
-                    dlBtn.classList.add('hidden');
-                    playBtn.classList.remove('hidden');
-                    stopBtn.classList.add('hidden');
-                } else {
-                    // idle
-                    dlBtn.classList.remove('hidden');
-                    playBtn.classList.remove('hidden');
-                    stopBtn.classList.add('hidden');
-                }
+                playBtn.classList.toggle('hidden', isPlaying);
+                dlBtn.classList.toggle('hidden', isPlaying || isDownloading || done);
+                stopBtn.classList.toggle('hidden', !isPlaying && !isDownloading);
             }
         }
     }
