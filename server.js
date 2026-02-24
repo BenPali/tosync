@@ -341,51 +341,28 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const existingTorrent = torrentClient.get(magnetLink);
-
-            if (existingTorrent) {
-                // Already tracked — return existing info
-                if (activeTorrents.has(existingTorrent.infoHash)) {
-                    if (!existingTorrent.ready) {
-                        await new Promise(resolve => existingTorrent.once('ready', resolve));
-                    }
-                } else {
-                    // Orphaned torrent — try to remove and re-add cleanly
-                    let removed = false;
-                    try {
-                        await new Promise((resolve) => {
-                            torrentClient.remove(existingTorrent, { destroyStore: false }, resolve);
-                        });
-                        removed = true;
-                    } catch (e) {
-                        console.error('Failed to remove orphaned torrent, re-tracking it:', e.message);
-                    }
-
-                    if (!removed) {
-                        // Can't remove — re-track the orphan so it's usable again
-                        if (!existingTorrent.ready) {
-                            await new Promise(resolve => existingTorrent.once('ready', resolve));
-                        }
-                        activeTorrents.set(existingTorrent.infoHash, {
-                            torrent: existingTorrent,
-                            roomId,
-                            addedAt: Date.now(),
-                            selectedFiles: new Set()
-                        });
-                    }
-                }
-
-                if (activeTorrents.has(existingTorrent.infoHash)) {
-                    const videoFiles = existingTorrent.files
-                        .map((f, i) => ({ file: f, index: i }))
-                        .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
-                    return res.json({
-                        infoHash: existingTorrent.infoHash,
-                        name: existingTorrent.name || 'Unknown',
-                        files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
-                        totalLength: existingTorrent.length || 0
+            const existing = torrentClient.get(magnetLink);
+            if (existing && existing.infoHash) {
+                if (!activeTorrents.has(existing.infoHash)) {
+                    activeTorrents.set(existing.infoHash, {
+                        torrent: existing,
+                        roomId,
+                        addedAt: Date.now(),
+                        selectedFiles: new Set()
                     });
                 }
+                if (!existing.ready) {
+                    await new Promise(resolve => existing.once('ready', resolve));
+                }
+                const videoFiles = existing.files
+                    .map((f, i) => ({ file: f, index: i }))
+                    .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
+                return res.json({
+                    infoHash: existing.infoHash,
+                    name: existing.name || 'Unknown',
+                    files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
+                    totalLength: existing.length || 0
+                });
             }
 
             const { videosDir } = ensureRoomDirectories(roomId);
@@ -434,6 +411,31 @@ if (ENABLE_TORRENTS) {
             });
 
         } catch (error) {
+            if (error.message && error.message.includes('duplicate')) {
+                const retry = torrentClient.get(magnetLink);
+                if (retry && retry.infoHash) {
+                    if (!activeTorrents.has(retry.infoHash)) {
+                        activeTorrents.set(retry.infoHash, {
+                            torrent: retry,
+                            roomId,
+                            addedAt: Date.now(),
+                            selectedFiles: new Set()
+                        });
+                    }
+                    if (!retry.ready) {
+                        await new Promise(resolve => retry.once('ready', resolve));
+                    }
+                    const videoFiles = retry.files
+                        .map((f, i) => ({ file: f, index: i }))
+                        .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
+                    return res.json({
+                        infoHash: retry.infoHash,
+                        name: retry.name || 'Unknown',
+                        files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
+                        totalLength: retry.length || 0
+                    });
+                }
+            }
             console.error('Torrent operation failed:', error.message);
             res.status(500).json({ error: error.message || 'Failed to add torrent' });
         }
