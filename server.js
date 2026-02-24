@@ -379,6 +379,7 @@ if (ENABLE_TORRENTS) {
 
                 torrent.once('ready', () => {
                     clearTimeout(timeout);
+                    torrent.pause();
                     resolve();
                 });
 
@@ -444,6 +445,7 @@ if (ENABLE_TORRENTS) {
         if (!file) return res.status(404).json({ error: 'File not found' });
 
         file.select();
+        if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
         res.json({ index: parseInt(req.params.fileIndex), name: file.name, progress: file.progress, done: file.done });
     });
 
@@ -498,6 +500,7 @@ if (ENABLE_TORRENTS) {
         }
 
         file.select();
+        if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
 
         const ext = path.extname(file.name).toLowerCase();
         const contentType = {
