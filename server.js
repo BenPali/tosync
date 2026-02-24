@@ -341,14 +341,12 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            let existingTorrent = torrentClient.get(magnetLink);
+            const existingTorrent = torrentClient.get(magnetLink);
 
             if (existingTorrent) {
-                if (Array.isArray(existingTorrent)) {
-                    existingTorrent = existingTorrent[0];
-                }
-
-                if (existingTorrent && typeof existingTorrent.once === 'function') {
+                // If it's already tracked, return existing info
+                const tracked = activeTorrents.get(existingTorrent.infoHash);
+                if (tracked) {
                     if (!existingTorrent.ready) {
                         await new Promise(resolve => existingTorrent.once('ready', resolve));
                     }
@@ -362,6 +360,9 @@ if (ENABLE_TORRENTS) {
                         totalLength: existingTorrent.length || 0
                     });
                 }
+
+                // Orphaned torrent (e.g. from incomplete destroy) — clean it up
+                await new Promise(resolve => existingTorrent.destroy({ destroyStore: false }, resolve));
             }
 
             const { videosDir } = ensureRoomDirectories(roomId);
@@ -465,12 +466,12 @@ if (ENABLE_TORRENTS) {
         res.json({ index: idx, name: file.name, progress: file.progress, done: file.done });
     });
 
-    app.delete('/api/torrents/:infoHash', requireAdmin, (req, res) => {
+    app.delete('/api/torrents/:infoHash', requireAdmin, async (req, res) => {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
-        torrentInfo.torrent.destroy({ destroyStore: true });
         activeTorrents.delete(req.params.infoHash);
+        await new Promise(resolve => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
         res.json({ ok: true });
     });
 
