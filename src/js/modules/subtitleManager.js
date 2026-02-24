@@ -161,6 +161,22 @@ export class SubtitleManager {
             return base + 'text-slate-300 hover:bg-white/10';
         };
 
+        // Search bar when many subtitles
+        if (state.availableSubtitles.length > 5) {
+            const search = document.createElement('input');
+            search.type = 'text';
+            search.placeholder = 'Search subtitles...';
+            search.className = 'w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-primary outline-none';
+            search.addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase();
+                subtitlesList.querySelectorAll('[data-subtitle-item]').forEach(el => {
+                    const match = !q || el.dataset.subtitleItem.toLowerCase().includes(q);
+                    el.classList.toggle('hidden', !match);
+                });
+            });
+            subtitlesList.appendChild(search);
+        }
+
         const noSubtitleOption = document.createElement('div');
         noSubtitleOption.className = getClasses(state.selectedSubtitleId === 'none');
         noSubtitleOption.onclick = () => this.selectSubtitle('none');
@@ -173,6 +189,7 @@ export class SubtitleManager {
         state.availableSubtitles.forEach(subtitle => {
             const subtitleOption = document.createElement('div');
             subtitleOption.className = getClasses(state.selectedSubtitleId === subtitle.filename);
+            subtitleOption.dataset.subtitleItem = `${subtitle.label} ${subtitle.language}`;
             subtitleOption.onclick = () => this.selectSubtitle(subtitle.filename);
             subtitleOption.innerHTML = `
                 <span class="truncate mr-2">${subtitle.label}</span>

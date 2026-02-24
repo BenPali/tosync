@@ -13,6 +13,7 @@ import cookieParser from 'cookie-parser';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { fileTypeFromBuffer } from 'file-type';
+import { execFile } from 'child_process';
 import dns from 'dns';
 import ptt from 'parse-torrent-title';
 
@@ -473,6 +474,116 @@ if (ENABLE_TORRENTS) {
         res.json({ ok: true });
     });
 
+    // -- Embedded subtitle extraction --
+
+    const BITMAP_SUBTITLE_CODECS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
+    const extractingSubtitles = new Set(); // dedup key: "infoHash-fileIndex"
+
+    function ffprobeSubtitles(filePath) {
+        return new Promise((resolve, reject) => {
+            execFile('ffprobe', [
+                '-v', 'error', '-print_format', 'json',
+                '-show_entries', 'stream=index,codec_type,codec_name:stream_tags=language,title',
+                '-i', filePath
+            ], { timeout: 30000 }, (err, stdout) => {
+                if (err) return reject(err);
+                try {
+                    const data = JSON.parse(stdout);
+                    const subs = (data.streams || []).filter(s =>
+                        s.codec_type === 'subtitle' && !BITMAP_SUBTITLE_CODECS.has(s.codec_name)
+                    );
+                    resolve(subs);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
+    }
+
+    function ffmpegExtractSubtitle(inputPath, streamIndex, outputPath) {
+        return new Promise((resolve, reject) => {
+            execFile('ffmpeg', [
+                '-y', '-i', inputPath,
+                '-map', `0:${streamIndex}`,
+                '-c:s', 'webvtt',
+                outputPath
+            ], { timeout: 120000 }, (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    }
+
+    async function extractEmbeddedSubtitles(infoHash, fileIndex, roomId) {
+        const dedupKey = `${infoHash}-${fileIndex}`;
+        if (extractingSubtitles.has(dedupKey)) return;
+        extractingSubtitles.add(dedupKey);
+
+        try {
+            const torrentInfo = activeTorrents.get(infoHash);
+            if (!torrentInfo) return;
+
+            const file = torrentInfo.torrent.files[fileIndex];
+            if (!file) return;
+
+            const { subtitlesDir } = ensureRoomDirectories(roomId);
+            const filePath = path.join(path.dirname(subtitlesDir), 'videos', file.path);
+
+            if (!fs.existsSync(filePath)) return;
+
+            const streams = await ffprobeSubtitles(filePath);
+            if (streams.length === 0) return;
+
+            const io = app.get('io');
+            const rooms = app.get('rooms');
+            const room = rooms?.get(roomId);
+
+            let subtitleTrackIndex = 0;
+            for (const stream of streams) {
+                const filename = `embedded-${infoHash.slice(0, 8)}-${stream.index}.vtt`;
+                const outputPath = path.join(subtitlesDir, filename);
+
+                // Skip if already extracted
+                if (fs.existsSync(outputPath)) {
+                    subtitleTrackIndex++;
+                    continue;
+                }
+
+                try {
+                    await ffmpegExtractSubtitle(filePath, stream.index, outputPath);
+                } catch (e) {
+                    console.error(`Failed to extract subtitle stream ${stream.index}:`, e.message);
+                    subtitleTrackIndex++;
+                    continue;
+                }
+
+                const lang = stream.tags?.language || 'und';
+                const title = stream.tags?.title;
+                const label = title ? `${lang} - ${title}` : `${lang} (Track ${subtitleTrackIndex + 1})`;
+
+                const subtitleInfo = {
+                    filename,
+                    originalName: `${label} (Embedded)`,
+                    label,
+                    language: lang,
+                    url: `/rooms/${roomId}/subtitles/${filename}`,
+                    roomId
+                };
+
+                if (room) {
+                    room.subtitles.push(subtitleInfo);
+                    io.to(roomId).emit('subtitle-added', { subtitle: subtitleInfo, user: 'System' });
+                }
+
+                subtitleTrackIndex++;
+            }
+
+            console.log(`Extracted ${subtitleTrackIndex} subtitle tracks from ${file.name}`);
+        } catch (e) {
+            console.error('Subtitle extraction failed:', e.message);
+        }
+    }
+
     app.get('/api/torrents/:infoHash/files/:fileIndex/stream', (req, res) => {
         const { infoHash, fileIndex } = req.params;
         const torrentInfo = activeTorrents.get(infoHash);
@@ -505,6 +616,11 @@ if (ENABLE_TORRENTS) {
 
         file.select();
         if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
+
+        // Extract embedded subtitles in background (fire-and-forget)
+        extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), roomId).catch(e =>
+            console.error('Subtitle extraction failed:', e.message)
+        );
 
         const ext = path.extname(file.name).toLowerCase();
         const contentType = {
@@ -1340,6 +1456,7 @@ io.engine.use(sessionMiddleware);
 app.set('io', io);
 
 const rooms = new Map();
+app.set('rooms', rooms);
 const users = new Map();
 const activeStreams = new Map();
 const playlistCache = new Map();
