@@ -344,28 +344,47 @@ if (ENABLE_TORRENTS) {
             const existingTorrent = torrentClient.get(magnetLink);
 
             if (existingTorrent) {
-                // If it's already tracked, return existing info
-                const tracked = activeTorrents.get(existingTorrent.infoHash);
-                if (tracked) {
+                // Already tracked — return existing info
+                if (activeTorrents.has(existingTorrent.infoHash)) {
                     if (!existingTorrent.ready) {
                         await new Promise(resolve => existingTorrent.once('ready', resolve));
                     }
+                } else {
+                    // Orphaned torrent — try to remove and re-add cleanly
+                    let removed = false;
+                    try {
+                        await new Promise((resolve) => {
+                            torrentClient.remove(existingTorrent, { destroyStore: false }, resolve);
+                        });
+                        removed = true;
+                    } catch (e) {
+                        console.error('Failed to remove orphaned torrent, re-tracking it:', e.message);
+                    }
+
+                    if (!removed) {
+                        // Can't remove — re-track the orphan so it's usable again
+                        if (!existingTorrent.ready) {
+                            await new Promise(resolve => existingTorrent.once('ready', resolve));
+                        }
+                        activeTorrents.set(existingTorrent.infoHash, {
+                            torrent: existingTorrent,
+                            roomId,
+                            addedAt: Date.now(),
+                            selectedFiles: new Set()
+                        });
+                    }
+                }
+
+                if (activeTorrents.has(existingTorrent.infoHash)) {
+                    const videoFiles = existingTorrent.files
+                        .map((f, i) => ({ file: f, index: i }))
+                        .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
                     return res.json({
                         infoHash: existingTorrent.infoHash,
                         name: existingTorrent.name || 'Unknown',
-                        files: existingTorrent.files
-                            .map((f, i) => ({ file: f, index: i }))
-                            .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()))
-                            .map(({ file, index }) => parseFileInfo(file, index)),
+                        files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
                         totalLength: existingTorrent.length || 0
                     });
-                }
-
-                // Orphaned torrent (e.g. from incomplete destroy) — clean it up
-                try {
-                    torrentClient.remove(magnetLink);
-                } catch (e) {
-                    console.error('Failed to remove orphaned torrent:', e.message);
                 }
             }
 
