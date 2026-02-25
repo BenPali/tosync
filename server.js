@@ -481,6 +481,7 @@ if (ENABLE_TORRENTS) {
     const extractingSubtitles = new Set();
     const completedExtractions = new Set();
     const extractionWatchers = new Map();
+    app.set('completedExtractions', completedExtractions);
 
     function ffprobeSubtitles(filePath) {
         return new Promise((resolve, reject) => {
@@ -1777,7 +1778,8 @@ io.on('connection', (socket) => {
         const { action, mediaData } = data;
 
         room.subtitles = [];
-        completedExtractions.clear();
+        const _completedExtractions = app.get('completedExtractions');
+        if (_completedExtractions) _completedExtractions.clear();
 
         switch (action) {
             case 'load-torrent':
