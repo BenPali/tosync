@@ -244,6 +244,7 @@ export class MediaManager {
 
     // Handle media updates from server
     handleMediaUpdate(data) {
+        subtitleManager.clearSubtitles();
 
         switch (data.action) {
             case 'load-torrent':

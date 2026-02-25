@@ -205,6 +205,14 @@ export class SubtitleManager {
         }
     }
 
+    clearSubtitles() {
+        state.availableSubtitles = [];
+        state.selectedSubtitleId = null;
+        const existingTracks = state.videoPlayer.querySelectorAll('track');
+        existingTracks.forEach(track => track.remove());
+        this.updateSubtitlesList();
+    }
+
     toggleSubtitles() {
         const tracks = Array.from(state.videoPlayer.textTracks);
         if (tracks.length > 0) {

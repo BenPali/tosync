@@ -21,6 +21,31 @@ export class VideoPlayer {
         state.videoPlayer.addEventListener('ratechange', this._boundHandleRateChange);
     }
 
+    debugAudioState() {
+        const v = state.videoPlayer;
+        console.group('[AUDIO DEBUG]');
+        console.log('src:', v.src);
+        console.log('currentSrc:', v.currentSrc);
+        console.log('muted:', v.muted);
+        console.log('volume:', v.volume);
+        console.log('readyState:', v.readyState);
+        console.log('networkState:', v.networkState);
+        console.log('paused:', v.paused);
+        console.log('error:', v.error);
+        if (v.audioTracks) {
+            console.log('audioTracks.length:', v.audioTracks.length);
+            for (let i = 0; i < v.audioTracks.length; i++) {
+                console.log(`  track[${i}]:`, { id: v.audioTracks[i].id, kind: v.audioTracks[i].kind, label: v.audioTracks[i].label, enabled: v.audioTracks[i].enabled });
+            }
+        } else {
+            console.log('audioTracks: not supported by browser');
+        }
+        if (v.mediaKeys) console.log('mediaKeys:', v.mediaKeys);
+        console.log('crossOrigin:', v.crossOrigin);
+        console.log('defaultMuted:', v.defaultMuted);
+        console.groupEnd();
+    }
+
     // Event handlers for automatic synchronization
     handlePlay() {
         if (state.isLiveStream) return;

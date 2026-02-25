@@ -623,7 +623,7 @@ if (ENABLE_TORRENTS) {
                     roomId
                 };
 
-                if (room && !room.subtitles.some(s => s.filename === filename)) {
+                if (room && room.currentMedia?.data?.infoHash === infoHash && !room.subtitles.some(s => s.filename === filename)) {
                     room.subtitles.push(subtitleInfo);
                     io.to(roomId).emit('subtitle-added', { subtitle: subtitleInfo, user: 'System' });
                 }
@@ -694,6 +694,8 @@ if (ENABLE_TORRENTS) {
             '.avi': 'video/x-msvideo',
             '.mov': 'video/quicktime'
         }[ext] || 'application/octet-stream';
+
+        console.log(`[STREAM DEBUG] file: ${file.name}, ext: ${ext}, contentType: ${contentType}, size: ${file.length}, done: ${file.done}, range: ${req.headers.range || 'none'}`);
 
         res.setHeader('Content-Type', contentType);
         res.setHeader('Accept-Ranges', 'bytes');
@@ -1773,6 +1775,9 @@ io.on('connection', (socket) => {
         room.lastActivity = Date.now();
 
         const { action, mediaData } = data;
+
+        room.subtitles = [];
+        completedExtractions.clear();
 
         switch (action) {
             case 'load-torrent':
