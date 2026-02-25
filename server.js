@@ -469,6 +469,7 @@ if (ENABLE_TORRENTS) {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
+        clearExtractionWatchers(req.params.infoHash);
         activeTorrents.delete(req.params.infoHash);
         await new Promise(resolve => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
         res.json({ ok: true });
@@ -477,7 +478,9 @@ if (ENABLE_TORRENTS) {
     // -- Embedded subtitle extraction --
 
     const BITMAP_SUBTITLE_CODECS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle']);
-    const extractingSubtitles = new Set(); // dedup key: "infoHash-fileIndex"
+    const extractingSubtitles = new Set();
+    const completedExtractions = new Set();
+    const extractionWatchers = new Map();
 
     function ffprobeSubtitles(filePath) {
         return new Promise((resolve, reject) => {
@@ -514,9 +517,46 @@ if (ENABLE_TORRENTS) {
         });
     }
 
+    function watchForFileCompletion(infoHash, fileIndex, roomId) {
+        const dedupKey = `${infoHash}-${fileIndex}`;
+        if (extractionWatchers.has(dedupKey)) return;
+
+        const intervalId = setInterval(() => {
+            const info = activeTorrents.get(infoHash);
+            if (!info) {
+                clearInterval(intervalId);
+                extractionWatchers.delete(dedupKey);
+                return;
+            }
+            const file = info.torrent.files[fileIndex];
+            if (!file) {
+                clearInterval(intervalId);
+                extractionWatchers.delete(dedupKey);
+                return;
+            }
+            if (file.done) {
+                clearInterval(intervalId);
+                extractionWatchers.delete(dedupKey);
+                extractEmbeddedSubtitles(infoHash, fileIndex, roomId).catch(e =>
+                    console.error('Subtitle extraction retry on file complete failed:', e.message)
+                );
+            }
+        }, 10000);
+        extractionWatchers.set(dedupKey, intervalId);
+    }
+
+    function clearExtractionWatchers(infoHash) {
+        for (const [key, intervalId] of extractionWatchers) {
+            if (key.startsWith(infoHash + '-')) {
+                clearInterval(intervalId);
+                extractionWatchers.delete(key);
+            }
+        }
+    }
+
     async function extractEmbeddedSubtitles(infoHash, fileIndex, roomId) {
         const dedupKey = `${infoHash}-${fileIndex}`;
-        if (extractingSubtitles.has(dedupKey)) return;
+        if (extractingSubtitles.has(dedupKey) || completedExtractions.has(dedupKey)) return;
         extractingSubtitles.add(dedupKey);
 
         try {
@@ -529,37 +569,50 @@ if (ENABLE_TORRENTS) {
             const { subtitlesDir } = ensureRoomDirectories(roomId);
             const filePath = path.join(path.dirname(subtitlesDir), 'videos', file.path);
 
-            if (!fs.existsSync(filePath)) return;
+            if (!fs.existsSync(filePath)) {
+                if (!file.done) watchForFileCompletion(infoHash, fileIndex, roomId);
+                return;
+            }
 
-            const streams = await ffprobeSubtitles(filePath);
-            if (streams.length === 0) return;
+            let streams;
+            try {
+                streams = await ffprobeSubtitles(filePath);
+            } catch (e) {
+                console.error('ffprobe failed (file may be incomplete):', e.message);
+                if (!file.done) watchForFileCompletion(infoHash, fileIndex, roomId);
+                return;
+            }
+
+            if (streams.length === 0) {
+                completedExtractions.add(dedupKey);
+                return;
+            }
 
             const io = app.get('io');
             const rooms = app.get('rooms');
             const room = rooms?.get(roomId);
 
-            let subtitleTrackIndex = 0;
-            for (const stream of streams) {
+            let extracted = 0;
+            let failed = 0;
+            for (const [i, stream] of streams.entries()) {
                 const filename = `embedded-${infoHash.slice(0, 8)}-${stream.index}.vtt`;
                 const outputPath = path.join(subtitlesDir, filename);
 
-                // Skip if already extracted
-                if (fs.existsSync(outputPath)) {
-                    subtitleTrackIndex++;
-                    continue;
+                if (!fs.existsSync(outputPath)) {
+                    try {
+                        await ffmpegExtractSubtitle(filePath, stream.index, outputPath);
+                        extracted++;
+                    } catch (e) {
+                        console.error(`Failed to extract subtitle stream ${stream.index}:`, e.message);
+                        failed++;
+                        continue;
+                    }
                 }
 
-                try {
-                    await ffmpegExtractSubtitle(filePath, stream.index, outputPath);
-                } catch (e) {
-                    console.error(`Failed to extract subtitle stream ${stream.index}:`, e.message);
-                    subtitleTrackIndex++;
-                    continue;
-                }
-
+                // Always register with room (handles server restart / re-extraction)
                 const lang = stream.tags?.language || 'und';
                 const title = stream.tags?.title;
-                const label = title ? `${lang} - ${title}` : `${lang} (Track ${subtitleTrackIndex + 1})`;
+                const label = title ? `${lang} - ${title}` : `${lang} (Track ${i + 1})`;
 
                 const subtitleInfo = {
                     filename,
@@ -570,17 +623,28 @@ if (ENABLE_TORRENTS) {
                     roomId
                 };
 
-                if (room) {
+                if (room && !room.subtitles.some(s => s.filename === filename)) {
                     room.subtitles.push(subtitleInfo);
                     io.to(roomId).emit('subtitle-added', { subtitle: subtitleInfo, user: 'System' });
                 }
-
-                subtitleTrackIndex++;
             }
 
-            console.log(`Extracted ${subtitleTrackIndex} subtitle tracks from ${file.name}`);
+            if (failed > 0 && !file.done) {
+                watchForFileCompletion(infoHash, fileIndex, roomId);
+            } else {
+                completedExtractions.add(dedupKey);
+            }
+
+            if (extracted > 0) {
+                console.log(`Extracted ${extracted} embedded subtitle tracks from ${file.name}`);
+            }
         } catch (e) {
             console.error('Subtitle extraction failed:', e.message);
+            const torrentInfo = activeTorrents.get(infoHash);
+            const file = torrentInfo?.torrent?.files?.[fileIndex];
+            if (file && !file.done) watchForFileCompletion(infoHash, fileIndex, roomId);
+        } finally {
+            extractingSubtitles.delete(dedupKey);
         }
     }
 
@@ -1250,6 +1314,7 @@ if (ENABLE_TORRENTS) {
 
         activeTorrents.forEach((info, hash) => {
             if (now - info.addedAt > maxAge && info.torrent.done) {
+                clearExtractionWatchers(hash);
                 info.torrent.destroy({ destroyStore: false });
                 activeTorrents.delete(hash);
                 console.log(`Cleaned up torrent: ${hash.substring(0, 8)}...`);
