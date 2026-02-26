@@ -1686,8 +1686,15 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
 
         session.lastAccessed = Date.now();
 
+        // Patch init segment URI — ffmpeg's -hls_base_url doesn't apply to #EXT-X-MAP
+        const playlist = await fs.promises.readFile(playlistPath, 'utf8');
+        const patched = playlist.replace(
+            'URI="init.mp4"',
+            `URI="/api/hls/segments/${session.token}/init.mp4"`
+        );
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-cache');
-        res.sendFile(playlistPath);
+        res.send(patched);
 
     } catch (error) {
         console.error('HLS playlist error:', error.message);
