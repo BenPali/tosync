@@ -312,15 +312,11 @@ function startHlsSession(sessionKey, inputStream, needs) {
     const session = { proc, dir, startedAt: Date.now() };
     console.log(`[HLS] Starting session: ${sessionKey} (transcoding: ${needs})`);
 
-    proc.stderr.on('data', (data) => {
-        const msg = data.toString();
-        if (msg.includes('Error') || msg.includes('error')) {
-            console.error(`[HLS ${sessionKey}] ffmpeg:`, msg.trim());
-        }
-    });
-
+    let stderrBuf = '';
+    proc.stderr.on('data', (data) => { stderrBuf += data.toString(); });
     proc.on('close', (code) => {
         console.log(`[HLS] Session ended: ${sessionKey} (exit code: ${code})`);
+        if (stderrBuf.trim()) console.log(`[HLS ${sessionKey}] ffmpeg output:\n${stderrBuf.trim()}`);
     });
 
     inputStream.pipe(proc.stdin).on('error', (err) => {
