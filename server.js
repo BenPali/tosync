@@ -1486,8 +1486,15 @@ app.get('/api/codecs', async (req, res) => {
                 return res.json({ ready: true, ...codecCache.get(cacheKey) });
             }
 
+            const videosDir = path.join(roomsDir, torrentInfo.roomId, 'videos');
+            const filePath = path.join(videosDir, file.path);
+
+            if (!fs.existsSync(filePath)) {
+                return res.json({ ready: false });
+            }
+
             try {
-                const codecs = await ffprobeCodecs(file.path);
+                const codecs = await ffprobeCodecs(filePath);
                 codecCache.set(cacheKey, codecs);
                 return res.json({ ready: true, ...codecs });
             } catch {
