@@ -277,6 +277,9 @@ function ffprobeCodecs(filePath) {
     });
 }
 
+// Hoisted so HLS endpoint (outside ENABLE_TORRENTS block) can trigger subtitle extraction
+let extractEmbeddedSubtitles = null;
+
 // HLS transcoding session manager
 const hlsSessions = new Map();
 const hlsTokenMap = new Map(); // token → sessionKey
@@ -727,7 +730,7 @@ if (ENABLE_TORRENTS) {
         }
     }
 
-    async function extractEmbeddedSubtitles(infoHash, fileIndex, roomId) {
+    extractEmbeddedSubtitles = async function(infoHash, fileIndex, roomId) {
         const dedupKey = `${infoHash}-${fileIndex}`;
         if (extractingSubtitles.has(dedupKey) || completedExtractions.has(dedupKey)) return;
         extractingSubtitles.add(dedupKey);
@@ -819,7 +822,7 @@ if (ENABLE_TORRENTS) {
         } finally {
             extractingSubtitles.delete(dedupKey);
         }
-    }
+    };
 
     app.get('/api/torrents/:infoHash/files/:fileIndex/stream', (req, res) => {
         const { infoHash, fileIndex } = req.params;
@@ -1636,6 +1639,13 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
                     ? path.join(roomsDir, torrentInfo.roomId, 'videos', file.path)
                     : file.createReadStream();
                 startHlsSession(sessionKey, input, needs);
+
+                // Extract embedded subtitles (same as raw stream endpoint)
+                if (extractEmbeddedSubtitles) {
+                    extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), torrentInfo.roomId).catch(e =>
+                        console.error('Subtitle extraction failed:', e.message)
+                    );
+                }
             }
 
         } else if (source === 'upload') {
