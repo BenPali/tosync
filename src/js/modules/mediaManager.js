@@ -3,6 +3,7 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, torrentManager, subtitleManager, uiManager } from '../main.js';
+import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls } from './codecUtils.js';
 
 export class MediaManager {
     // Upload file
@@ -41,7 +42,7 @@ export class MediaManager {
             }
         });
 
-        xhr.addEventListener('load', () => {
+        xhr.addEventListener('load', async () => {
             if (xhr.status === 200) {
                 try {
                     const data = JSON.parse(xhr.responseText);
@@ -50,21 +51,42 @@ export class MediaManager {
                         throw new Error(data.error);
                     }
 
-
                     // Clear previous event listeners to prevent multiple calls
                     state.isLiveStream = false;
+                    destroyHls();
                     state.videoPlayer.onloadedmetadata = null;
                     state.videoPlayer.onerror = null;
 
-                    state.videoPlayer.src = data.url;
+                    // Check codec compatibility
+                    const socketId = state.socket ? state.socket.id : '';
+                    const roomId = state.currentRoomId;
+                    const filename = data.filename;
+
+                    const codecs = await fetchCodecs({
+                        source: 'upload', roomId, filename, socketId
+                    });
+                    const needs = codecs ? checkCodecSupport(codecs) : null;
+
+                    if (needs) {
+                        const hlsUrl = buildHlsUrl({ source: 'upload', roomId, filename }, needs);
+                        const transcodingWhat = needs === 'both' ? 'video & audio' : needs;
+                        uiManager.updateMediaStatus(`Transcoding ${transcodingWhat}...`);
+                        startHlsPlayback(hlsUrl);
+                    } else {
+                        state.videoPlayer.src = data.url;
+                        state.videoPlayer.load();
+                    }
 
                     state.videoPlayer.onloadedmetadata = () => {
-                        uiManager.updateMediaStatus('✅ Ready to stream: ' + data.originalName);
+                        const suffix = needs ? ' (transcoded)' : '';
+                        uiManager.updateMediaStatus('Ready to stream: ' + data.originalName + suffix);
 
                         socketManager.broadcastMediaAction('load-file', {
                             fileName: data.originalName,
                             fileSize: data.size,
-                            url: data.url
+                            url: data.url,
+                            filename: data.filename,
+                            codecs: codecs
                         });
 
                         // Restore subtitle selection if any
@@ -79,7 +101,6 @@ export class MediaManager {
                         }, 2000);
                     };
 
-                    state.videoPlayer.load();
                     const torrentInfo = document.getElementById('torrentInfo');
                     if (torrentInfo) {
                         torrentInfo.classList.add('hidden');
@@ -216,10 +237,7 @@ export class MediaManager {
 
         state.isLiveStream = false;
 
-        if (state.hlsInstance) {
-            state.hlsInstance.destroy();
-            state.hlsInstance = null;
-        }
+        destroyHls();
 
         if (state.mpegtsPlayer) {
             state.mpegtsPlayer.destroy();
@@ -247,52 +265,78 @@ export class MediaManager {
         subtitleManager.clearSubtitles();
 
         switch (data.action) {
-            case 'load-torrent':
+            case 'load-torrent': {
                 state.isLiveStream = false;
+                destroyHls();
                 state.currentTorrentInfo = data.mediaData.data;
-                uiManager.updateMediaStatus(`${data.user} loaded torrent: ${state.currentTorrentInfo.name}`);
+                const ti = state.currentTorrentInfo;
+                uiManager.updateMediaStatus(`${data.user} loaded torrent: ${ti.name}`);
 
-                if (state.currentTorrentInfo.streamUrl) {
-                    // Clear previous event listeners
+                if (ti.infoHash !== undefined && ti.fileIndex !== undefined) {
                     state.videoPlayer.onloadedmetadata = null;
                     state.videoPlayer.onerror = null;
 
-                    state.videoPlayer.src = state.currentTorrentInfo.streamUrl;
-                    state.videoPlayer.load();
+                    // Check codec support using codecs from broadcast
+                    const torrentCodecs = ti.codecs || null;
+                    const torrentNeeds = torrentCodecs ? checkCodecSupport(torrentCodecs) : null;
+                    const torrentSocketId = state.socket ? state.socket.id : '';
 
-                    document.getElementById('torrentName').textContent = state.currentTorrentInfo.name;
-                    document.getElementById('torrentSize').textContent = uiManager.formatBytes(state.currentTorrentInfo.size || 0);
+                    if (torrentNeeds) {
+                        const hlsUrl = buildHlsUrl({ source: 'torrent', infoHash: ti.infoHash, fileIndex: ti.fileIndex }, torrentNeeds);
+                        startHlsPlayback(hlsUrl);
+                    } else {
+                        state.videoPlayer.src = `/api/torrents/${ti.infoHash}/files/${ti.fileIndex}/stream?socketId=${torrentSocketId}`;
+                        state.videoPlayer.load();
+                    }
 
-                    // Only show torrent info for admins
+                    document.getElementById('torrentName').textContent = ti.name;
+                    document.getElementById('torrentSize').textContent = uiManager.formatBytes(ti.size || 0);
+
                     if (state.userRole === 'admin' && torrentManager) {
-                        const torrentInfo = document.getElementById('torrentInfo');
-                        if (torrentInfo) {
-                            torrentInfo.classList.remove('hidden');
-                        }
+                        const torrentInfoEl = document.getElementById('torrentInfo');
+                        if (torrentInfoEl) torrentInfoEl.classList.remove('hidden');
                         torrentManager.updateTorrentProgressFromServer();
                     }
                 }
                 break;
+            }
 
-            case 'load-file':
+            case 'load-file': {
                 state.isLiveStream = false;
+                destroyHls();
                 state.currentTorrentInfo = null;
                 if (torrentManager) {
                     torrentManager.clearTorrentProgress();
                 }
-                uiManager.updateMediaStatus(`${data.user} loaded: ${data.mediaData.data.fileName}`);
 
-                // Clear previous event listeners
+                const fileData = data.mediaData.data;
+                uiManager.updateMediaStatus(`${data.user} loaded: ${fileData.fileName}`);
+
                 state.videoPlayer.onloadedmetadata = null;
                 state.videoPlayer.onerror = null;
 
-                state.videoPlayer.src = data.mediaData.data.url;
-                state.videoPlayer.load();
+                // Check codec support using codecs from broadcast
+                const fileCodecs = fileData.codecs || null;
+                const fileNeeds = fileCodecs ? checkCodecSupport(fileCodecs) : null;
+
+                if (fileNeeds && fileData.filename) {
+                    const hlsUrl = buildHlsUrl({
+                        source: 'upload',
+                        roomId: state.currentRoomId,
+                        filename: fileData.filename
+                    }, fileNeeds);
+                    startHlsPlayback(hlsUrl);
+                } else {
+                    state.videoPlayer.src = fileData.url;
+                    state.videoPlayer.load();
+                }
+
                 const torrentInfoLoadFile = document.getElementById('torrentInfo');
                 if (torrentInfoLoadFile) {
                     torrentInfoLoadFile.classList.add('hidden');
                 }
                 break;
+            }
 
             case 'load-stream':
                 if (data.user === state.userName) {
@@ -304,10 +348,7 @@ export class MediaManager {
                     torrentManager.clearTorrentProgress();
                 }
 
-                if (state.hlsInstance) {
-                    state.hlsInstance.destroy();
-                    state.hlsInstance = null;
-                }
+                destroyHls();
 
                 if (state.mpegtsPlayer) {
                     state.mpegtsPlayer.destroy();
@@ -352,25 +393,38 @@ export class MediaManager {
     // Restore file media for late-joining users
     restoreFileMedia(mediaData, videoState) {
         state.isLiveStream = false;
-        const videoUrl = mediaData.data.url;
-
-        // Clear previous event listeners
+        destroyHls();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
 
-        state.videoPlayer.src = videoUrl;
+        const fileData = mediaData.data;
+        const codecs = fileData.codecs || null;
+        const needs = codecs ? checkCodecSupport(codecs) : null;
+
+        if (needs && fileData.filename) {
+            const hlsUrl = buildHlsUrl({
+                source: 'upload',
+                roomId: state.currentRoomId,
+                filename: fileData.filename
+            }, needs);
+            startHlsPlayback(hlsUrl);
+        } else {
+            state.videoPlayer.src = fileData.url;
+            state.videoPlayer.load();
+        }
+
         state.videoPlayer.currentTime = videoState.currentTime || 0;
         state.videoPlayer.playbackRate = videoState.playbackRate || 1;
 
         state.videoPlayer.onloadedmetadata = () => {
-            uiManager.updateMediaStatus(`Watching: ${mediaData.data.fileName}`);
+            const suffix = needs ? ' (transcoded)' : '';
+            uiManager.updateMediaStatus(`Watching: ${fileData.fileName}${suffix}`);
 
             if (videoState.isPlaying) {
                 state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
             }
         };
 
-        state.videoPlayer.load();
         document.getElementById('torrentInfo').classList.add('hidden');
     }
 
@@ -381,10 +435,7 @@ export class MediaManager {
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
 
-        if (state.hlsInstance) {
-            state.hlsInstance.destroy();
-            state.hlsInstance = null;
-        }
+        destroyHls();
 
         if (state.mpegtsPlayer) {
             state.mpegtsPlayer.destroy();

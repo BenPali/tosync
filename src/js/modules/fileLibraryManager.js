@@ -1,5 +1,6 @@
 import { state } from '../state.js';
 import { socketManager, torrentManager, uiManager } from '../main.js';
+import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls } from './codecUtils.js';
 
 export class FileLibraryManager {
     async loadFileLibrary() {
@@ -97,24 +98,49 @@ export class FileLibraryManager {
         return fileItem;
     }
 
-    playLibraryFile(fileUrl, fileName) {
+    async playLibraryFile(fileUrl, fileName) {
         if (state.userRole !== 'admin') {
             uiManager.showError('Only admins can play files from library');
             return;
         }
 
+        destroyHls();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
 
-        state.videoPlayer.src = fileUrl;
-        state.videoPlayer.load();
+        // Extract roomId and filename from URL: /rooms/:roomId/videos/:filename
+        const urlParts = fileUrl.split('/');
+        const roomId = urlParts[2];
+        const filename = urlParts[4];
+
+        // Check codec compatibility
+        const socketId = state.socket ? state.socket.id : '';
+        uiManager.updateMediaStatus(`Analyzing codecs...`);
+
+        const codecs = await fetchCodecs({
+            source: 'upload', roomId, filename, socketId
+        });
+        const needs = codecs ? checkCodecSupport(codecs) : null;
+
+        if (needs) {
+            const hlsUrl = buildHlsUrl({ source: 'upload', roomId, filename }, needs);
+            const transcodingWhat = needs === 'both' ? 'video & audio' : needs;
+            uiManager.updateMediaStatus(`Transcoding ${transcodingWhat}...`);
+            startHlsPlayback(hlsUrl);
+        } else {
+            state.videoPlayer.src = fileUrl;
+            state.videoPlayer.load();
+        }
 
         state.videoPlayer.onloadedmetadata = () => {
-            uiManager.updateMediaStatus(`Playing: ${fileName}`);
+            const suffix = needs ? ' (transcoded)' : '';
+            uiManager.updateMediaStatus(`Playing: ${fileName}${suffix}`);
             socketManager.broadcastMediaAction('load-file', {
                 fileName: fileName,
                 fileSize: 0,
-                url: fileUrl
+                url: fileUrl,
+                filename: filename,
+                codecs: codecs
             });
         };
 

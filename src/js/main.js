@@ -32,20 +32,6 @@ setupPopStateHandler(roomManager);
 document.addEventListener('DOMContentLoaded', async () => {
     state.videoPlayer = document.getElementById('videoPlayer');
 
-    // Debug: expose audio debug globally and log on key video events
-    window.debugAudio = () => videoPlayer.debugAudioState();
-    state.videoPlayer.addEventListener('loadedmetadata', () => {
-        console.log('[AUDIO] loadedmetadata fired');
-        videoPlayer.debugAudioState();
-    });
-    state.videoPlayer.addEventListener('canplay', () => {
-        console.log('[AUDIO] canplay fired');
-        videoPlayer.debugAudioState();
-    });
-    state.videoPlayer.addEventListener('error', (e) => {
-        console.error('[AUDIO] video error:', state.videoPlayer.error);
-    });
-
     uiManager.initialize();
     uiManager.updateMediaStatus('Select a room to begin');
     subtitleManager.initialize();
