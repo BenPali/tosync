@@ -285,16 +285,16 @@ function startHlsSession(sessionKey, inputStream, needs) {
     const dir = `/tmp/tosync-hls-${sessionKey}`;
     fs.mkdirSync(dir, { recursive: true });
 
-    const codecFlags = [];
+    const codecFlags = ['-map', '0:v:0', '-map', '0:a:0'];
     switch (needs) {
         case 'audio':
             codecFlags.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k');
             break;
         case 'video':
-            codecFlags.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'copy');
+            codecFlags.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p', '-c:a', 'copy');
             break;
         case 'both':
-            codecFlags.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac', '-b:a', '192k');
+            codecFlags.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k');
             break;
     }
 
@@ -310,18 +310,17 @@ function startHlsSession(sessionKey, inputStream, needs) {
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
     const session = { proc, dir, startedAt: Date.now() };
+    console.log(`[HLS] Starting session: ${sessionKey} (transcoding: ${needs})`);
 
     proc.stderr.on('data', (data) => {
         const msg = data.toString();
         if (msg.includes('Error') || msg.includes('error')) {
-            console.error(`[HLS ${sessionKey}] ffmpeg error:`, msg.trim());
+            console.error(`[HLS ${sessionKey}] ffmpeg:`, msg.trim());
         }
     });
 
     proc.on('close', (code) => {
-        if (code !== 0 && code !== 255) {
-            console.error(`[HLS ${sessionKey}] ffmpeg exited with code ${code}`);
-        }
+        console.log(`[HLS] Session ended: ${sessionKey} (exit code: ${code})`);
     });
 
     inputStream.pipe(proc.stdin).on('error', (err) => {
