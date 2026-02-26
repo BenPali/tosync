@@ -14,6 +14,7 @@ import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { fileTypeFromBuffer } from 'file-type';
 import { execFile, spawn } from 'child_process';
+import crypto from 'crypto';
 import dns from 'dns';
 import ptt from 'parse-torrent-title';
 
@@ -278,52 +279,92 @@ function ffprobeCodecs(filePath) {
 
 // HLS transcoding session manager
 const hlsSessions = new Map();
+const hlsTokenMap = new Map(); // token → sessionKey
 
-function startHlsSession(sessionKey, inputStream, needs) {
-    if (hlsSessions.has(sessionKey)) return hlsSessions.get(sessionKey);
+// Idle session garbage collection — kill sessions with no activity for 2min
+setInterval(() => {
+    const now = Date.now();
+    for (const [sessionKey, session] of hlsSessions.entries()) {
+        if (!session.proc) continue;
+        if (now - session.lastAccessed > 120000) {
+            console.log(`[HLS] Idle cleanup: ${sessionKey}`);
+            stopHlsSession(sessionKey);
+        }
+    }
+}, 30000);
 
+function startHlsSession(sessionKey, input, needs) {
+    const existing = hlsSessions.get(sessionKey);
+    if (existing) return existing;
+
+    const token = crypto.randomBytes(16).toString('hex');
     const dir = `/tmp/tosync-hls-${sessionKey}`;
     fs.mkdirSync(dir, { recursive: true });
 
+    // Build session object first, mark as pending — same reference stays in the map
+    const session = { pending: true, dir, token, startedAt: Date.now(), lastAccessed: Date.now() };
+    hlsSessions.set(sessionKey, session);
+    hlsTokenMap.set(token, sessionKey);
+
+    const isPiped = typeof input !== 'string';
+    const inputFlags = isPiped
+        ? ['-probesize', '50M', '-analyzeduration', '100M', '-i', 'pipe:0']
+        : ['-i', input];
+
+    const audioFlags = ['-c:a', 'aac', '-ac', '2', '-b:a', '192k'];
+    const videoFlags = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
     const codecFlags = ['-map', '0:v:0', '-map', '0:a:0'];
-    switch (needs) {
-        case 'audio':
-            codecFlags.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k');
-            break;
-        case 'video':
-            codecFlags.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p', '-c:a', 'copy');
-            break;
-        case 'both':
-            codecFlags.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k');
-            break;
+
+    if (needs === 'audio') {
+        codecFlags.push('-c:v', 'copy', ...audioFlags);
+    } else {
+        codecFlags.push(...videoFlags, ...audioFlags);
     }
 
     const proc = spawn('ffmpeg', [
-        '-i', 'pipe:0',
+        ...inputFlags,
         ...codecFlags,
         '-f', 'hls',
-        '-hls_time', '4',
+        '-hls_time', '2',
         '-hls_playlist_type', 'event',
+        '-hls_segment_type', 'fmp4',
         '-hls_list_size', '0',
-        '-hls_segment_filename', path.join(dir, 'seg%05d.ts'),
+        '-hls_base_url', `/api/hls/segments/${token}/`,
+        '-hls_segment_filename', path.join(dir, 'seg%05d.m4s'),
         path.join(dir, 'master.m3u8')
-    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    ], { stdio: isPiped ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
 
-    const session = { proc, dir, startedAt: Date.now() };
-    console.log(`[HLS] Starting session: ${sessionKey} (transcoding: ${needs})`);
+    console.log(`[HLS] Starting session: ${sessionKey} (transcoding: ${needs}, piped: ${isPiped})`);
+
+    if (isPiped) {
+        input.on('error', (err) => {
+            if (err.code !== 'EPIPE') console.error(`[HLS ${sessionKey}] input stream error:`, err.message);
+        });
+        input.pipe(proc.stdin).on('error', (err) => {
+            if (err.code !== 'EPIPE') console.error(`[HLS ${sessionKey}] pipe error:`, err.message);
+        });
+    }
 
     let stderrBuf = '';
-    proc.stderr.on('data', (data) => { stderrBuf += data.toString(); });
+    proc.stderr.on('data', (data) => {
+        if (stderrBuf.length < 50000) stderrBuf += data.toString();
+    });
     proc.on('close', (code) => {
         console.log(`[HLS] Session ended: ${sessionKey} (exit code: ${code})`);
         if (stderrBuf.trim()) console.log(`[HLS ${sessionKey}] ffmpeg output:\n${stderrBuf.trim()}`);
+        // Only clean up if this session is still the current one for this key
+        if (code !== 0 && hlsSessions.get(sessionKey) === session) {
+            hlsTokenMap.delete(session.token);
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+            hlsSessions.delete(sessionKey);
+        }
     });
 
-    inputStream.pipe(proc.stdin).on('error', (err) => {
-        if (err.code !== 'EPIPE') console.error(`[HLS ${sessionKey}] pipe error:`, err.message);
-    });
+    // Mutate the SAME object so all references see the update
+    session.proc = proc;
+    session.inputStream = isPiped ? input : null;
+    session.pending = false;
 
-    hlsSessions.set(sessionKey, session);
     return session;
 }
 
@@ -331,30 +372,51 @@ function stopHlsSession(sessionKey) {
     const session = hlsSessions.get(sessionKey);
     if (!session) return;
 
-    try { session.proc.kill('SIGTERM'); } catch {}
-    try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+    // Remove from maps immediately to prevent reuse
     hlsSessions.delete(sessionKey);
+    if (session.token) hlsTokenMap.delete(session.token);
+
+    if (!session.proc) {
+        try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+        return;
+    }
+
+    if (session.inputStream) {
+        try { session.inputStream.unpipe(session.proc.stdin); } catch {}
+        try { session.inputStream.destroy(); } catch {}
+    }
+
+    if (session.proc.exitCode !== null) {
+        // Already exited — clean up synchronously
+        try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+    } else {
+        // Still running — kill and clean up after exit
+        try { session.proc.kill('SIGTERM'); } catch {}
+        session.proc.once('close', () => {
+            try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+        });
+    }
 }
 
 function stopAllHlsSessionsForRoom(roomId) {
+    const keysToStop = [];
+
     // Torrent session keys use infoHash, not roomId — look up which hashes belong to this room
     if (activeTorrents) {
         for (const [infoHash, info] of activeTorrents) {
             if (info.roomId === roomId) {
                 for (const key of hlsSessions.keys()) {
-                    if (key.startsWith(`torrent-${infoHash}-`)) {
-                        stopHlsSession(key);
-                    }
+                    if (key.startsWith(`torrent-${infoHash}-`)) keysToStop.push(key);
                 }
             }
         }
     }
 
     for (const key of hlsSessions.keys()) {
-        if (key.startsWith(`upload-${roomId}-`)) {
-            stopHlsSession(key);
-        }
+        if (key.startsWith(`upload-${roomId}-`)) keysToStop.push(key);
     }
+
+    keysToStop.forEach(k => stopHlsSession(k));
 }
 
 const storage = multer.diskStorage({
@@ -577,11 +639,9 @@ if (ENABLE_TORRENTS) {
 
         clearExtractionWatchers(req.params.infoHash);
         // Clean up any HLS transcode sessions for this torrent
-        for (const key of hlsSessions.keys()) {
-            if (key.startsWith(`torrent-${req.params.infoHash}-`)) {
-                stopHlsSession(key);
-            }
-        }
+        [...hlsSessions.keys()]
+            .filter(k => k.startsWith(`torrent-${req.params.infoHash}-`))
+            .forEach(k => stopHlsSession(k));
         activeTorrents.delete(req.params.infoHash);
         await new Promise(resolve => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
         res.json({ ok: true });
@@ -1550,7 +1610,7 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
     };
 
     try {
-        let sessionKey, inputStream;
+        let sessionKey;
 
         if (source === 'torrent') {
             if (!ENABLE_TORRENTS || !activeTorrents) {
@@ -1566,12 +1626,16 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
             const file = torrentInfo.torrent.files[parseInt(fileIndex)];
             if (!file) return res.status(404).json({ error: 'File not found' });
 
-            file.select();
-            if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
-
             sessionKey = `torrent-${infoHash}-${fileIndex}-${needs}`;
+
             if (!hlsSessions.has(sessionKey)) {
-                inputStream = file.createReadStream();
+                file.select();
+                if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
+
+                const input = file.done
+                    ? path.join(roomsDir, torrentInfo.roomId, 'videos', file.path)
+                    : file.createReadStream();
+                startHlsSession(sessionKey, input, needs);
             }
 
         } else if (source === 'upload') {
@@ -1581,46 +1645,49 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
                 return res.status(403).json({ error: 'Join the room first' });
             }
 
-            const videosDir = path.join(roomsDir, roomId, 'videos');
-            const filePath = path.resolve(videosDir, filename);
-            if (!filePath.startsWith(path.resolve(videosDir))) {
-                return res.status(403).json({ error: 'Access denied' });
-            }
-            if (!fs.existsSync(filePath)) {
-                return res.status(404).json({ error: 'File not found' });
-            }
-
             sessionKey = `upload-${roomId}-${filename}-${needs}`;
+
             if (!hlsSessions.has(sessionKey)) {
-                inputStream = fs.createReadStream(filePath);
+                const videosDir = path.join(roomsDir, roomId, 'videos');
+                const input = path.resolve(videosDir, filename);
+                if (!input.startsWith(path.resolve(videosDir))) {
+                    return res.status(403).json({ error: 'Access denied' });
+                }
+                if (!fs.existsSync(input)) {
+                    return res.status(404).json({ error: 'File not found' });
+                }
+                startHlsSession(sessionKey, input, needs);
             }
 
         } else {
             return res.status(400).json({ error: 'Invalid source' });
         }
 
-        // Start session if needed
-        if (!hlsSessions.has(sessionKey)) {
-            startHlsSession(sessionKey, inputStream, needs);
+        const session = hlsSessions.get(sessionKey);
+        if (!session || session.pending) {
+            return res.status(503).json({ error: 'Transcoding starting...' });
         }
 
-        // Wait for master.m3u8 to be created by ffmpeg
-        const session = hlsSessions.get(sessionKey);
         const playlistPath = path.join(session.dir, 'master.m3u8');
+        const initSegment = path.join(session.dir, 'init.mp4');
+        const firstSegment = path.join(session.dir, 'seg00000.m4s');
 
+        // Wait for playlist, init segment, AND first media segment
         let attempts = 0;
-        while (!fs.existsSync(playlistPath) && attempts < 50) {
+        while ((!fs.existsSync(playlistPath) || !fs.existsSync(initSegment) || !fs.existsSync(firstSegment)) && attempts < 50) {
+            if (session.proc.exitCode !== null) break; // ffmpeg crashed — don't wait 10s
             await new Promise(r => setTimeout(r, 200));
             attempts++;
         }
 
-        if (!fs.existsSync(playlistPath)) {
-            return res.status(503).json({ error: 'Transcoding not ready yet' });
+        if (!fs.existsSync(playlistPath) || !fs.existsSync(initSegment) || !fs.existsSync(firstSegment)) {
+            return res.status(503).json({ error: 'Transcoding failed to start' });
         }
 
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        session.lastAccessed = Date.now();
+
         res.setHeader('Cache-Control', 'no-cache');
-        res.send(fs.readFileSync(playlistPath, 'utf8'));
+        res.sendFile(playlistPath);
 
     } catch (error) {
         console.error('HLS playlist error:', error.message);
@@ -1628,30 +1695,45 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
     }
 });
 
-app.get('/api/hls/:segment', (req, res) => {
-    const { socketId } = req.query;
-    const { segment } = req.params;
-    const isAdmin = req.session && req.session.isAdmin;
+app.get('/api/hls/segments/:token/:segment', (req, res) => {
+    const { token, segment } = req.params;
+    const sessionKey = hlsTokenMap.get(token);
+    if (!sessionKey) return res.status(404).json({ error: 'Not found' });
 
-    // Find the session that has this segment
-    for (const [, session] of hlsSessions) {
-        const segmentPath = path.join(session.dir, segment);
-        if (fs.existsSync(segmentPath)) {
-            // Quick auth check
-            if (!isAdmin) {
-                const memberRoomId = socketRoomMembership.get(socketId);
-                if (!memberRoomId) {
-                    return res.status(403).json({ error: 'Join the room first' });
-                }
-            }
-
-            res.setHeader('Content-Type', 'video/mp2t');
-            res.setHeader('Cache-Control', 'public, max-age=31536000');
-            return fs.createReadStream(segmentPath).pipe(res);
-        }
+    const session = hlsSessions.get(sessionKey);
+    if (!session || session.pending) {
+        return res.status(404).json({ error: 'Session not found' });
     }
 
-    res.status(404).json({ error: 'Segment not found' });
+    const safeName = path.basename(segment);
+    const segmentPath = path.join(session.dir, safeName);
+    if (!fs.existsSync(segmentPath)) {
+        return res.status(404).json({ error: 'Segment not found' });
+    }
+
+    session.lastAccessed = Date.now();
+
+    const isMp4 = safeName.endsWith('.m4s') || safeName.endsWith('.mp4');
+    res.setHeader('Content-Type', isMp4 ? 'video/mp4' : 'video/mp2t');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    fs.createReadStream(segmentPath).pipe(res);
+});
+
+app.post('/api/hls/keepalive', (req, res) => {
+    const { source, needs } = req.query;
+    let sessionKey;
+    if (source === 'torrent') {
+        const { infoHash, fileIndex } = req.query;
+        sessionKey = `torrent-${infoHash}-${fileIndex}-${needs}`;
+    } else if (source === 'upload') {
+        const { roomId, filename } = req.query;
+        sessionKey = `upload-${roomId}-${filename}-${needs}`;
+    }
+    if (!sessionKey) return res.status(400).end();
+    const session = hlsSessions.get(sessionKey);
+    if (!session) return res.status(404).end();
+    session.lastAccessed = Date.now();
+    res.status(204).end();
 });
 
 // Conditional auth: private instance requires login, public instance allows (room admin is client-side)
@@ -2533,9 +2615,7 @@ server.listen(PORT, () => {
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down...');
     // Clean up all HLS transcode sessions
-    for (const key of hlsSessions.keys()) {
-        stopHlsSession(key);
-    }
+    [...hlsSessions.keys()].forEach(k => stopHlsSession(k));
     if (ENABLE_TORRENTS && torrentClient) {
         torrentClient.destroy();
     }

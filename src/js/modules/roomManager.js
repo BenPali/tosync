@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, authManager, torrentManager, uiManager } from '../main.js';
+import { destroyHls } from './codecUtils.js';
 
 export class RoomManager {
     generateRoomCode() {
@@ -304,10 +305,7 @@ export class RoomManager {
             state.videoPlayer.src = '';
         }
 
-        if (state.hlsInstance) {
-            state.hlsInstance.destroy();
-            state.hlsInstance = null;
-        }
+        destroyHls();
 
         if (state.mpegtsPlayer) {
             state.mpegtsPlayer.destroy();

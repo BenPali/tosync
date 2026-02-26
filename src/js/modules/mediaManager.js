@@ -374,6 +374,7 @@ export class MediaManager {
 
             case 'clear-media':
                 state.isLiveStream = false;
+                destroyHls();
                 state.currentTorrentInfo = null;
                 if (torrentManager) {
                     torrentManager.clearTorrentProgress();

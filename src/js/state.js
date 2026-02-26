@@ -23,6 +23,7 @@ export const state = {
     torrentProgressInterval: null,
     lastMediaAction: null,
     hlsInstance: null,
+    hlsKeepalive: null,
     mpegtsPlayer: null,
     isLiveStream: false,
 

@@ -20,15 +20,21 @@ const CODEC_MIME_MAP = {
 };
 
 // Returns 'audio' | 'video' | 'both' | null (what needs transcoding)
+// Uses MediaSource.isTypeSupported — the correct check for HLS.js/MSE playback
 export function checkCodecSupport(codecs) {
-    const v = document.createElement('video');
-
     const videoMime = codecs.video ? CODEC_MIME_MAP.video[codecs.video.codec] || null : null;
     const audioMime = codecs.audio ? CODEC_MIME_MAP.audio[codecs.audio.codec] || null : null;
 
-    // null MIME = unknown codec, assume unsupported
-    const videoOk = !codecs.video || (videoMime !== null && v.canPlayType(videoMime) !== '');
-    const audioOk = !codecs.audio || (audioMime !== null && v.canPlayType(audioMime) !== '');
+    const canCheckMse = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported;
+    const checkSupport = (mime) => {
+        if (!mime) return false;
+        if (canCheckMse) return MediaSource.isTypeSupported(mime);
+        const v = document.createElement('video');
+        return v.canPlayType(mime) !== '';
+    };
+
+    const videoOk = !codecs.video || checkSupport(videoMime);
+    const audioOk = !codecs.audio || checkSupport(audioMime);
 
     if (!videoOk && !audioOk) return 'both';
     if (!videoOk) return 'video';
@@ -81,15 +87,25 @@ export function startHlsPlayback(hlsUrl) {
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                 hls.startLoad();
             } else {
-                hls.destroy();
+                destroyHls();
             }
         }
     });
+
+    // Keepalive ping every 30s so the server doesn't GC the session while paused
+    const keepaliveUrl = hlsUrl.replace('/api/hls/master.m3u8', '/api/hls/keepalive');
+    state.hlsKeepalive = setInterval(() => {
+        fetch(keepaliveUrl, { method: 'POST' }).catch(() => {});
+    }, 30000);
 
     return true;
 }
 
 export function destroyHls() {
+    if (state.hlsKeepalive) {
+        clearInterval(state.hlsKeepalive);
+        state.hlsKeepalive = null;
+    }
     if (state.hlsInstance) {
         state.hlsInstance.destroy();
         state.hlsInstance = null;

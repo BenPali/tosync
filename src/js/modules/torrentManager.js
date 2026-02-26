@@ -305,6 +305,7 @@ export class TorrentManager {
             });
             if (this._playingFileIndex === fileIndex) {
                 this._playingFileIndex = null;
+                destroyHls();
                 state.videoPlayer.src = '';
                 state.videoPlayer.load();
                 uiManager.updateMediaStatus('Playback stopped');
@@ -325,6 +326,7 @@ export class TorrentManager {
             this._lastFilesStatus = null;
             this.clearTorrentProgress();
             state.currentTorrentInfo = null;
+            destroyHls();
             state.videoPlayer.src = '';
             state.videoPlayer.load();
 
