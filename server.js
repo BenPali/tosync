@@ -258,10 +258,12 @@ const codecCache = new Map();
 function ffprobeCodecs(filePath) {
     return new Promise((resolve, reject) => {
         execFile('ffprobe', [
-            '-v', 'error', '-print_format', 'json',
+            '-v', 'error',
+            '-probesize', '5M', '-analyzeduration', '5M',
+            '-print_format', 'json',
             '-show_entries', 'stream=codec_type,codec_name,profile,width,height',
             '-i', filePath
-        ], { timeout: 30000 }, (err, stdout) => {
+        ], { timeout: 10000 }, (err, stdout) => {
             if (err) return reject(err);
             try {
                 const data = JSON.parse(stdout);
@@ -845,6 +847,11 @@ if (ENABLE_TORRENTS) {
             isRoomMember = memberRoomId === roomId && socket?.connected;
         }
 
+        // Fallback: session-based auth (survives socket reconnections)
+        if (!isRoomMember && req.session && req.session.roomId === roomId) {
+            isRoomMember = true;
+        }
+
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
         }
@@ -877,8 +884,16 @@ if (ENABLE_TORRENTS) {
         const range = req.headers.range;
         if (range) {
             const parts = range.replace(/bytes=/, '').split('-');
-            const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : file.length - 1;
+            let start = parseInt(parts[0], 10);
+            let end = parts[1] ? parseInt(parts[1], 10) : file.length - 1;
+
+            if (isNaN(start)) {
+                // Suffix-byte-range: "bytes=-N" means last N bytes
+                start = Math.max(0, file.length - end);
+                end = file.length - 1;
+            }
+            if (end >= file.length) end = file.length - 1;
+
             const chunksize = (end - start) + 1;
 
             res.status(206);
@@ -1161,6 +1176,10 @@ if (ENABLE_TORRENTS) {
             isRoomMember = memberRoomId === roomId && socket?.connected;
         }
 
+        if (!isRoomMember && req.session && req.session.roomId === roomId) {
+            isRoomMember = true;
+        }
+
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
         }
@@ -1375,6 +1394,10 @@ if (ENABLE_TORRENTS) {
             isRoomMember = memberRoomId === roomId && socket?.connected;
         }
 
+        if (!isRoomMember && roomId && req.session && req.session.roomId === roomId) {
+            isRoomMember = true;
+        }
+
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
         }
@@ -1509,14 +1532,16 @@ app.get('/api/codecs', async (req, res) => {
     const { source, socketId } = req.query;
     const isAdmin = req.session && req.session.isAdmin;
 
-    // Auth: admin session OR room member via socketId
+    // Auth: admin session OR room member via socketId OR session roomId
     const checkRoomMember = (roomId) => {
         if (isAdmin) return true;
-        if (!socketId) return false;
-        const memberRoomId = socketRoomMembership.get(socketId);
-        const io = req.app.get('io');
-        const socket = io?.sockets?.sockets?.get(socketId);
-        return memberRoomId === roomId && socket?.connected;
+        if (socketId) {
+            const memberRoomId = socketRoomMembership.get(socketId);
+            const io = req.app.get('io');
+            const socket = io?.sockets?.sockets?.get(socketId);
+            if (memberRoomId === roomId && socket?.connected) return true;
+        }
+        return req.session && req.session.roomId === roomId;
     };
 
     try {
@@ -1605,11 +1630,13 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
 
     const checkRoomMember = (roomId) => {
         if (isAdmin) return true;
-        if (!socketId) return false;
-        const memberRoomId = socketRoomMembership.get(socketId);
-        const io = req.app.get('io');
-        const socket = io?.sockets?.sockets?.get(socketId);
-        return memberRoomId === roomId && socket?.connected;
+        if (socketId) {
+            const memberRoomId = socketRoomMembership.get(socketId);
+            const io = req.app.get('io');
+            const socket = io?.sockets?.sockets?.get(socketId);
+            if (memberRoomId === roomId && socket?.connected) return true;
+        }
+        return req.session && req.session.roomId === roomId;
     };
 
     try {
@@ -2050,6 +2077,7 @@ io.on('connection', (socket) => {
         }
 
         socketRoomMembership.set(socket.id, roomId);
+        if (session) { session.roomId = roomId; session.save(); }
         socket.emit('socket-registered', { socketId: socket.id });
 
         if (!rooms.has(roomId)) {

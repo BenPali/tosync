@@ -20,16 +20,14 @@ const CODEC_MIME_MAP = {
 };
 
 // Returns 'audio' | 'video' | 'both' | null (what needs transcoding)
-// Uses MediaSource.isTypeSupported — the correct check for HLS.js/MSE playback
+// Uses canPlayType — checks native <video> element support for direct streaming
 export function checkCodecSupport(codecs) {
     const videoMime = codecs.video ? CODEC_MIME_MAP.video[codecs.video.codec] || null : null;
     const audioMime = codecs.audio ? CODEC_MIME_MAP.audio[codecs.audio.codec] || null : null;
 
-    const canCheckMse = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported;
+    const v = document.createElement('video');
     const checkSupport = (mime) => {
-        if (!mime) return false;
-        if (canCheckMse) return MediaSource.isTypeSupported(mime);
-        const v = document.createElement('video');
+        if (!mime) return true; // Codec not in map — try direct playback
         return v.canPlayType(mime) !== '';
     };
 
@@ -54,7 +52,7 @@ export async function fetchCodecs(params, maxRetries = 5) {
             const data = await res.json();
             if (data.ready) return { video: data.video, audio: data.audio };
 
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 1000));
         } catch {
             return null;
         }
