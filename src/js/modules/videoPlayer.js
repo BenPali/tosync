@@ -112,12 +112,11 @@ export class VideoPlayer {
     }
 
     toggleFullscreen() {
-        const videoContainer = document.querySelector('.video-container');
-
         if (document.fullscreenElement) {
             document.exitFullscreen();
         } else {
-            videoContainer.requestFullscreen();
+            const container = state.videoPlayer.parentElement;
+            if (container) container.requestFullscreen();
         }
     }
 

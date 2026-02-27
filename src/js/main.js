@@ -168,32 +168,26 @@ function setupUIEventListeners() {
         });
 
         roomInput.addEventListener('input', (e) => {
-            let value = e.target.value;
-            if (value.includes('://') || value.includes('/')) {
-                const parts = value.split('/');
-                const possibleCode = parts[parts.length - 1];
-                if (possibleCode && possibleCode.length === config.ROOM_CODE_LENGTH) value = possibleCode;
-            }
-            e.target.value = value.toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
+            e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
         });
 
         roomInput.addEventListener('paste', (e) => {
             e.preventDefault();
-            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-            let roomCode = pastedText;
+            const raw = (e.clipboardData || window.clipboardData).getData('text').trim();
+            let code = raw;
 
-            if (pastedText.includes('://') || pastedText.includes('/')) {
-                const parts = pastedText.split('/');
-                const lastSegment = parts[parts.length - 1];
-                if (lastSegment && lastSegment.length === config.ROOM_CODE_LENGTH) {
-                    roomCode = lastSegment;
-                } else {
-                    const match = pastedText.match(new RegExp(`[A-Z0-9]{${config.ROOM_CODE_LENGTH}}`, 'i'));
-                    if (match) roomCode = match[0];
+            if (raw.includes('/')) {
+                try {
+                    const url = new URL(raw);
+                    const segments = url.pathname.split('/').filter(Boolean);
+                    if (segments.length) code = segments[segments.length - 1];
+                } catch {
+                    const cleaned = raw.replace(/[?#].*$/, '').replace(/\/+$/, '');
+                    code = cleaned.split('/').pop() || raw;
                 }
             }
 
-            e.target.value = roomCode.toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
+            e.target.value = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
         });
     }
 
