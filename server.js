@@ -514,9 +514,9 @@ if (ENABLE_TORRENTS) {
             return res.status(400).json({ error: 'Room ID required' });
         }
 
+        const hashMatch = magnetLink.match(/btih:([a-fA-F0-9]{40})/i);
         try {
             // Check activeTorrents by infoHash parsed from magnet (torrentClient.get() is unreliable)
-            const hashMatch = magnetLink.match(/btih:([a-fA-F0-9]{40})/i);
             if (hashMatch) {
                 const infoHash = hashMatch[1].toLowerCase();
                 const tracked = activeTorrents.get(infoHash);
@@ -558,6 +558,7 @@ if (ENABLE_TORRENTS) {
 
                 torrent.once('error', (err) => {
                     clearTimeout(timeout);
+                    torrent.destroy();
                     reject(err);
                 });
             });
@@ -583,6 +584,32 @@ if (ENABLE_TORRENTS) {
             });
 
         } catch (error) {
+            // Recover zombie torrents stuck in WebTorrent but missing from activeTorrents
+            if (error.message && error.message.includes('Cannot add duplicate torrent')) {
+                const infoHash = hashMatch ? hashMatch[1].toLowerCase() : null;
+                const existing = infoHash ? await torrentClient.get(infoHash) : null;
+                if (existing) {
+                    if (!existing.ready) {
+                        await new Promise(resolve => existing.once('ready', resolve));
+                    }
+                    activeTorrents.set(existing.infoHash, {
+                        torrent: existing,
+                        roomId,
+                        addedAt: Date.now(),
+                        selectedFiles: new Set()
+                    });
+                    const videoFiles = existing.files
+                        .map((f, i) => ({ file: f, index: i }))
+                        .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
+                    console.log(`Torrent recovered: ${existing.name}`);
+                    return res.json({
+                        infoHash: existing.infoHash,
+                        name: existing.name || 'Unknown',
+                        files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
+                        totalLength: existing.length || 0
+                    });
+                }
+            }
             console.error('Torrent operation failed:', error.message);
             res.status(500).json({ error: error.message || 'Failed to add torrent' });
         }
