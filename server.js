@@ -1027,6 +1027,41 @@ if (ENABLE_TORRENTS) {
         },
     });
 
+    // Resolve hostname, block SSRF, return undici dispatcher for that origin.
+    // Throws a friendly Error with .status if anything fails.
+    const resolveSsrfSafe = async (hostname) => {
+        const lookup = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+        for (const addr of lookup) {
+            if (isPrivateIP(addr.address)) {
+                const err = new Error('Destination not allowed');
+                err.status = 403;
+                throw err;
+            }
+        }
+        return { lookup, dispatcher: ipLockedDispatcher(lookup) };
+    };
+
+    // SSRF-safe fetch that follows up to N redirects, re-validating each hop.
+    // Returns the final Response (body preserved for streaming).
+    const ssrfSafeFetch = async (url, { signal, headers, maxRedirects = 3 } = {}) => {
+        let currentUrl = url;
+        for (let hop = 0; hop <= maxRedirects; hop++) {
+            const parsed = new URL(currentUrl);
+            if (!['http:', 'https:'].includes(parsed.protocol)) {
+                const err = new Error('Invalid protocol'); err.status = 400; throw err;
+            }
+            const { dispatcher } = await resolveSsrfSafe(parsed.hostname);
+            const response = await fetch(currentUrl, {
+                signal, headers, redirect: 'manual', dispatcher,
+            });
+            if (response.status < 300 || response.status >= 400) return response;
+            const location = response.headers.get('location');
+            if (!location) return response;
+            currentUrl = new URL(location, currentUrl).toString();
+        }
+        const err = new Error('Too many redirects'); err.status = 502; throw err;
+    };
+
     app.post('/api/stream/start', requireAdmin, async (req, res) => {
         const { streamUrl: directStreamUrl, channelId, roomId } = req.body;
 
@@ -1071,29 +1106,15 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true, verbatim: true });
-
-            for (const address of lookup) {
-                if (isPrivateIP(address.address)) {
-                    console.warn(`Blocked SSRF attempt to ${address.address}`);
-                    return res.status(403).json({ error: 'Destination not allowed' });
-                }
-            }
-
             const controller = new AbortController();
 
-            const response = await fetch(streamUrl, {
+            const response = await ssrfSafeFetch(streamUrl, {
                 signal: controller.signal,
-                redirect: 'manual',
-                dispatcher: ipLockedDispatcher(lookup),
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
-            if (response.status >= 300 && response.status < 400) {
-                return res.status(502).json({ error: 'Upstream redirects not allowed' });
-            }
             if (!response.ok) {
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
             }
@@ -1148,18 +1169,14 @@ if (ENABLE_TORRENTS) {
                         const newController = new AbortController();
                         streamInfo.controller = newController;
 
-                        const reconnectResponse = await fetch(streamUrl, {
+                        const reconnectResponse = await ssrfSafeFetch(streamUrl, {
                             signal: newController.signal,
-                            redirect: 'manual',
-                            dispatcher: ipLockedDispatcher(lookup),
                             headers: {
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                             }
                         });
 
-                        if (reconnectResponse.status >= 300 && reconnectResponse.status < 400) {
-                            console.error(`Stream reconnect refused: upstream redirected for room ${roomId}`);
-                        } else if (reconnectResponse.ok) {
+                        if (reconnectResponse.ok) {
                             console.log(`Stream reconnected for room ${roomId}`);
                             return pumpSource(reconnectResponse);
                         }
@@ -1193,7 +1210,7 @@ if (ENABLE_TORRENTS) {
         } catch (err) {
             const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
             console.error(`Stream start failed: ${err.message}${causeMsg}`);
-            res.status(500).json({ error: `Failed to connect: ${err.message}${causeMsg}` });
+            res.status(err.status || 500).json({ error: `Failed to connect: ${err.message}${causeMsg}` });
         }
     });
 
@@ -1260,22 +1277,11 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true, verbatim: true });
-
-            for (const address of lookup) {
-                if (isPrivateIP(address.address)) {
-                    console.warn(`Blocked SSRF attempt to ${address.address}`);
-                    return res.status(403).json({ error: 'Destination not allowed' });
-                }
-            }
-
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 300000);
 
-            const response = await fetch(playlistUrl, {
+            const response = await ssrfSafeFetch(playlistUrl, {
                 signal: controller.signal,
-                redirect: 'manual',
-                dispatcher: ipLockedDispatcher(lookup),
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
@@ -1283,9 +1289,6 @@ if (ENABLE_TORRENTS) {
 
             clearTimeout(timeout);
 
-            if (response.status >= 300 && response.status < 400) {
-                return res.status(502).json({ error: 'Upstream redirects not allowed' });
-            }
             if (!response.ok) {
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
             }
@@ -1323,7 +1326,7 @@ if (ENABLE_TORRENTS) {
         } catch (err) {
             const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
             console.error(`Playlist fetch failed: ${err.message}${causeMsg}`);
-            res.status(500).json({ error: `Failed to fetch playlist: ${err.message}${causeMsg}` });
+            res.status(err.status || 500).json({ error: `Failed to fetch playlist: ${err.message}${causeMsg}` });
         }
     });
 
@@ -1418,24 +1421,13 @@ if (ENABLE_TORRENTS) {
         }
 
         try {
-            const lookup = await dns.promises.lookup(urlObj.hostname, { all: true, verbatim: true });
-
-            for (const address of lookup) {
-                if (isPrivateIP(address.address)) {
-                    console.warn(`Blocked SSRF attempt to ${address.address} (${streamUrl.substring(0, 100)}...)`);
-                    return res.status(403).json({ error: 'Destination not allowed' });
-                }
-            }
-
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 30000);
 
-            console.log(`Proxy streaming from: ${urlObj.hostname} (${lookup[0].address})`);
+            console.log(`Proxy streaming from: ${urlObj.hostname}`);
 
-            const response = await fetch(streamUrl, {
+            const response = await ssrfSafeFetch(streamUrl, {
                 signal: controller.signal,
-                redirect: 'manual',
-                dispatcher: ipLockedDispatcher(lookup),
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
@@ -1443,9 +1435,6 @@ if (ENABLE_TORRENTS) {
 
             clearTimeout(timeout);
 
-            if (response.status >= 300 && response.status < 400) {
-                return res.status(502).json({ error: 'Upstream redirects not allowed' });
-            }
             if (!response.ok) {
                 console.warn(`Upstream returned ${response.status} for ${urlObj.hostname}`);
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
@@ -1502,7 +1491,7 @@ if (ENABLE_TORRENTS) {
             const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
             console.error(`Stream proxy failed for ${urlObj?.hostname}: ${err.message}${causeMsg}`);
             if (!res.headersSent) {
-                res.status(500).json({ error: `Failed to connect: ${err.message}${causeMsg}` });
+                res.status(err.status || 500).json({ error: `Failed to connect: ${err.message}${causeMsg}` });
             }
         }
     });
