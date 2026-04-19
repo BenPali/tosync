@@ -1220,6 +1220,7 @@ if (ENABLE_TORRENTS) {
         const isRoomMember = !!(req.session && req.session.roomId === roomId);
 
         if (!isAdmin && !isRoomMember) {
+            console.warn(`[relay 403] roomId=${roomId} sid=${req.session?.id} stored.roomId=${req.session?.roomId} isAdmin=${req.session?.isAdmin} isRoomAdmin=${req.session?.isRoomAdmin}`);
             return res.status(403).json({ error: 'Join the room first' });
         }
 
