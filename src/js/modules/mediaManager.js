@@ -58,12 +58,11 @@ export class MediaManager {
                     state.videoPlayer.onerror = null;
 
                     // Check codec compatibility
-                    const socketId = state.socket ? state.socket.id : '';
                     const roomId = state.currentRoomId;
                     const filename = data.filename;
 
                     const codecs = await fetchCodecs({
-                        source: 'upload', roomId, filename, socketId
+                        source: 'upload', roomId, filename
                     });
                     const needs = codecs ? checkCodecSupport(codecs) : null;
 
@@ -184,7 +183,7 @@ export class MediaManager {
                             if (state.mpegtsPlayer) {
                                 player.unload();
                                 player.load();
-                                player.play();
+                                player.play().catch(() => {});
                             }
                         }, 2000);
                     }
@@ -197,13 +196,13 @@ export class MediaManager {
                             if (state.mpegtsPlayer) {
                                 player.unload();
                                 player.load();
-                                player.play();
+                                player.play().catch(() => {});
                             }
                         }, 1000);
                     }
                 });
 
-                player.play();
+                player.play().catch(() => {});
             };
 
             createPlayer();
@@ -279,13 +278,12 @@ export class MediaManager {
                     // Check codec support using codecs from broadcast
                     const torrentCodecs = ti.codecs || null;
                     const torrentNeeds = torrentCodecs ? checkCodecSupport(torrentCodecs) : null;
-                    const torrentSocketId = state.socket ? state.socket.id : '';
 
                     if (torrentNeeds) {
                         const hlsUrl = buildHlsUrl({ source: 'torrent', infoHash: ti.infoHash, fileIndex: ti.fileIndex }, torrentNeeds);
                         startHlsPlayback(hlsUrl);
                     } else {
-                        state.videoPlayer.src = `/api/torrents/${ti.infoHash}/files/${ti.fileIndex}/stream?socketId=${torrentSocketId}`;
+                        state.videoPlayer.src = `/api/torrents/${ti.infoHash}/files/${ti.fileIndex}/stream`;
                         state.videoPlayer.load();
                     }
 
@@ -360,8 +358,7 @@ export class MediaManager {
 
                 const streamName = data.mediaData.data.streamName || 'Live Stream';
                 const relayPath = data.mediaData.data.relayUrl || `/api/stream/relay/${state.currentRoomId}`;
-                const socketId = state.socket ? state.socket.id : '';
-                const relayUrl = `${window.location.origin}${relayPath}?socketId=${encodeURIComponent(socketId)}`;
+                const relayUrl = `${window.location.origin}${relayPath}`;
 
                 this.loadStreamDirect(relayUrl, streamName);
                 uiManager.updateMediaStatus(`📡 ${data.user} started stream: ${streamName}`);
@@ -443,8 +440,7 @@ export class MediaManager {
             state.mpegtsPlayer = null;
         }
 
-        const socketId = state.socket ? state.socket.id : '';
-        const relayUrl = `${window.location.origin}${relayPath}?socketId=${encodeURIComponent(socketId)}`;
+        const relayUrl = `${window.location.origin}${relayPath}`;
 
         this.loadStreamDirect(relayUrl, streamName);
         uiManager.updateMediaStatus(`📡 Watching: ${streamName}`);

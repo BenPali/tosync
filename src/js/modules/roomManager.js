@@ -26,21 +26,19 @@ export class RoomManager {
         if (mainApp) mainApp.classList.add('hidden');
 
         const adminNameFormHtml = `
-            <div id="adminNameForm" class="max-w-md mx-auto mt-10 bg-surface border border-white/5 rounded-2xl p-8 shadow-2xl fade-in">
-                <h3 class="text-xl font-bold text-white mb-2">Create New Room</h3>
-                <p class="text-slate-400 text-sm mb-6">Enter your display name for this session.</p>
-
-                <div class="mb-6">
-                    <label for="adminNameInput" class="block text-xs font-bold text-slate-500 uppercase mb-2">Display Name</label>
-                    <input type="text" id="adminNameInput" placeholder="e.g. Admin"
-                           class="w-full bg-dark border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary transition text-center">
+            <div id="adminNameForm" class="max-w-md mx-auto mt-10 surface border hairline rounded-2xl p-7 shadow-2xl fade-in">
+                <h3 class="text-lg font-semibold text-neutral-100 mb-1">Create a room</h3>
+                <p class="text-neutral-500 text-sm mb-5">Pick a display name for this session.</p>
+                <div class="mb-5">
+                    <label for="adminNameInput" class="block text-xs text-neutral-300 mb-1.5">Display name</label>
+                    <input type="text" id="adminNameInput" placeholder="Admin"
+                           class="w-full bg-inset border hairline rounded-lg px-3 py-2.5 text-neutral-100 focus-visible:outline-none transition">
                 </div>
-
-                <div class="flex gap-3">
-                    <button id="createRoomWithNameBtn" class="flex-1 bg-primary hover:opacity-90 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-primary/20">
-                        Create Room
+                <div class="flex gap-2">
+                    <button id="createRoomWithNameBtn" class="flex-1 bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40">
+                        Create room
                     </button>
-                    <button id="backToRoomSelectFromAdminBtn" class="px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition">
+                    <button id="backToRoomSelectFromAdminBtn" class="px-5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 text-sm rounded-lg transition">
                         Cancel
                     </button>
                 </div>
@@ -125,11 +123,12 @@ export class RoomManager {
         const existingForm = document.getElementById('guestJoinForm');
         if (existingForm) existingForm.remove();
 
+        // state.currentRoomId is validated to [A-Z0-9]+ before this point.
         const connectingHtml = `
-        <div id="roomValidation" class="max-w-md mx-auto mt-10 text-center fade-in">
-            <h3 class="text-xl font-bold text-white mb-2">Connecting...</h3>
-            <p class="text-slate-400 text-sm mb-6">Validating room code ${state.currentRoomId}</p>
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+        <div id="roomValidation" class="max-w-md mx-auto mt-16 text-center fade-in">
+            <div class="inline-block animate-spin rounded-full h-6 w-6 border-2 border-neutral-700 border-t-primary mb-4"></div>
+            <h3 class="text-base font-medium text-neutral-100 mb-1">Connecting…</h3>
+            <p class="text-neutral-500 text-sm">Validating room <span class="font-mono text-neutral-300">${state.currentRoomId}</span></p>
         </div>
         `;
 
@@ -174,22 +173,24 @@ export class RoomManager {
         const existingForm = document.getElementById('guestJoinForm');
         if (existingForm) existingForm.remove();
 
+        // state.currentRoomId is validated to [A-Z0-9]+ before this point.
         const guestFormHtml = `
-        <div id="guestJoinForm" class="max-w-md mx-auto mt-10 bg-surface border border-white/5 rounded-2xl p-8 shadow-2xl fade-in">
-            <h3 class="text-xl font-bold text-white mb-2">Join Room ${state.currentRoomId}</h3>
-            <p class="text-slate-400 text-sm mb-6">Enter your name to join the party.</p>
-
-            <div class="mb-6">
-                <label for="guestNameJoin" class="block text-xs font-bold text-slate-500 uppercase mb-2">Display Name</label>
-                <input type="text" id="guestNameJoin" placeholder="e.g. Guest"
-                       class="w-full bg-dark border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary transition text-center">
+        <div id="guestJoinForm" class="max-w-md mx-auto mt-10 surface border hairline rounded-2xl p-7 shadow-2xl fade-in">
+            <h3 class="text-lg font-semibold text-neutral-100 mb-1">Join room <span class="font-mono text-primary">${state.currentRoomId}</span></h3>
+            <p class="text-neutral-500 text-sm mb-5">Enter your name to join.</p>
+            <div class="mb-5">
+                <label for="guestNameJoin" class="block text-xs text-neutral-300 mb-1.5">Display name</label>
+                <input type="text" id="guestNameJoin" placeholder="Guest"
+                       class="w-full bg-inset border hairline rounded-lg px-3 py-2.5 text-neutral-100 focus-visible:outline-none transition">
             </div>
-
-            <div class="flex gap-3">
-                <button id="joinAsGuestBtn" class="flex-1 bg-primary hover:opacity-90 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-primary/20">
-                    Join Now
+            <div id="guestJoinError" class="hidden mb-3 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
+                Room not found
+            </div>
+            <div class="flex gap-2">
+                <button id="joinAsGuestBtn" class="flex-1 bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40">
+                    Join
                 </button>
-                <button id="backToRoomSelectFromGuestBtn" class="px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition">
+                <button id="backToRoomSelectFromGuestBtn" class="px-5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 text-sm rounded-lg transition">
                     Cancel
                 </button>
             </div>
@@ -337,6 +338,16 @@ export class RoomManager {
         if (torrentInput) torrentInput.value = '';
         const fileInput = document.getElementById('fileInput');
         if (fileInput) fileInput.value = '';
+
+        const shortcutsHint = document.getElementById('shortcutsHint');
+        if (shortcutsHint) shortcutsHint.classList.add('hidden');
+        const torrentInfoEl = document.getElementById('torrentInfo');
+        if (torrentInfoEl) torrentInfoEl.classList.add('hidden');
+        const iptvBrowser = document.getElementById('iptvBrowser');
+        if (iptvBrowser) {
+            iptvBrowser.classList.add('hidden');
+            iptvBrowser.innerHTML = '';
+        }
     }
 
     leaveRoom() {

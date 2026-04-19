@@ -93,7 +93,7 @@ export class VideoPlayer {
     togglePlay() {
         if (state.isLiveStream) return;
         if (state.videoPlayer.paused) {
-            state.videoPlayer.play();
+            state.videoPlayer.play().catch(() => {});
         } else {
             state.videoPlayer.pause();
         }

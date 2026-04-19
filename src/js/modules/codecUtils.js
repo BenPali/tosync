@@ -61,8 +61,7 @@ export async function fetchCodecs(params, maxRetries = 5) {
 }
 
 export function buildHlsUrl(params, needs) {
-    const socketId = state.socket ? state.socket.id : '';
-    const query = new URLSearchParams({ ...params, needs, socketId }).toString();
+    const query = new URLSearchParams({ ...params, needs }).toString();
     return `/api/hls/master.m3u8?${query}`;
 }
 

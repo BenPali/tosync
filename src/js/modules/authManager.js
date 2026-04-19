@@ -8,20 +8,19 @@ export class AuthManager {
         state.userRole = role;
         state.userName = name;
 
-        // Clean up any existing guest join form
         const guestJoinForm = document.getElementById('guestJoinForm');
-        if (guestJoinForm) {
-            guestJoinForm.remove();
-        }
+        if (guestJoinForm) guestJoinForm.remove();
 
         document.getElementById('roleSelector').classList.add('hidden');
         document.getElementById('mainApp').classList.remove('hidden');
 
-        // Update UI for the role
+        const shortcutsHint = document.getElementById('shortcutsHint');
+        if (shortcutsHint) shortcutsHint.classList.remove('hidden');
+
         this.updateUIForRole(role, name);
         this.hideUserMenu();
 
-        uiManager.updateMediaStatus(`Ready - ${role} access in room ${state.currentRoomId}`);
+        uiManager.updateMediaStatus(`Ready — ${role} in ${state.currentRoomId}`);
         videoPlayer.setupEventListeners();
         socketManager.initializeSocket();
     }
@@ -30,26 +29,27 @@ export class AuthManager {
         const roleIndicator = document.getElementById('roleIndicator');
         const userInfo = document.getElementById('userInfo');
 
+        const baseChip = 'text-[10px] font-semibold rounded-full px-2.5 py-0.5 uppercase tracking-wider border';
         if (role === 'admin') {
             roleIndicator.textContent = 'Admin';
-            roleIndicator.className = 'role-indicator admin';
-            userInfo.textContent = `Connected as ${name}`;
-            document.getElementById('adminControls').style.display = 'block';
-            document.getElementById('adminControls').classList.remove('hidden');
-            document.getElementById('adminPlayerControls').classList.remove('hidden');
+            roleIndicator.className = `${baseChip} admin-glow text-primary bg-primary/10 border-primary/30`;
         } else {
             roleIndicator.textContent = 'Guest';
-            roleIndicator.className = 'role-indicator guest';
-            userInfo.textContent = `Connected as ${name}`;
-            document.getElementById('adminControls').style.display = 'none';
-            document.getElementById('adminControls').classList.add('hidden');
-            document.getElementById('adminPlayerControls').classList.add('hidden');
+            roleIndicator.className = `${baseChip} text-neutral-300 bg-neutral-800/60 border-neutral-100/10`;
+        }
+        userInfo.textContent = name;
+
+        // Elements that should only be visible (and thus interactive) for admins.
+        // Server-side also enforces admin on the matching endpoints — this is the UX hint.
+        const adminOnlyIds = ['adminControls', 'adminPlayerControls', 'subtitleUploadForm'];
+        const isAdmin = role === 'admin';
+        for (const id of adminOnlyIds) {
+            document.getElementById(id)?.classList.toggle('hidden', !isAdmin);
         }
 
-        // Update admin instructions visibility
         const adminInstructions = document.getElementById('adminUserInstructions');
         if (adminInstructions) {
-            adminInstructions.style.display = role === 'admin' ? 'block' : 'none';
+            adminInstructions.classList.toggle('hidden', role !== 'admin');
         }
     }
 
@@ -111,47 +111,48 @@ export class AuthManager {
 
         const menu = document.createElement('div');
         menu.id = 'userManagementMenu';
-        menu.className = 'user-management-menu';
+        menu.className = 'fixed z-[60] surface border hairline rounded-xl shadow-2xl overflow-hidden min-w-[180px] fade-in';
+
+        // Header showing the target user
+        const header = document.createElement('div');
+        header.className = 'px-3 py-2 border-b hairline text-xs text-neutral-500 flex items-center gap-2';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'text-neutral-200 font-medium truncate';
+        nameEl.textContent = userName;
+        header.append(nameEl, (() => {
+            const role = document.createElement('span');
+            role.className = 'font-mono text-[10px]';
+            role.textContent = '· ' + userRole;
+            return role;
+        })());
+        menu.appendChild(header);
 
         const actions = [];
-
-        // Add transfer admin option for guests
         if (userRole === 'guest') {
-            actions.push({
-                text: '👑 Make Admin',
-                action: 'transfer-admin',
-                className: 'make-admin'
+            actions.push({ label: 'Make admin', action: 'transfer-admin', cls: 'text-primary hover:bg-primary/10' });
+        }
+        actions.push({ label: 'Kick user', action: 'kick-user', cls: 'text-red-400 hover:bg-red-500/10' });
+
+        for (const a of actions) {
+            const btn = document.createElement('button');
+            btn.className = `w-full text-left text-sm ${a.cls} px-3 py-2 transition`;
+            btn.textContent = a.label;
+            btn.addEventListener('click', () => {
+                this.handleUserAction(a.action, userName, userRole);
+                this.hideUserMenu();
             });
+            menu.appendChild(btn);
         }
 
-        // Add kick option for all users except self
-        actions.push({
-            text: '🚪 Kick User',
-            action: 'kick-user',
-            className: 'kick-user'
-        });
-
-        actions.forEach(actionItem => {
-            const button = document.createElement('button');
-            button.className = `user-menu-btn ${actionItem.className}`;
-            button.textContent = actionItem.text;
-            button.onclick = () => {
-                this.handleUserAction(actionItem.action, userName, userRole);
-                this.hideUserMenu();
-            };
-            menu.appendChild(button);
-        });
-
-        // Position menu near the clicked user
+        // Position near the clicked chip; clamp to viewport.
         const rect = event.target.getBoundingClientRect();
-        menu.style.position = 'fixed';
-        menu.style.left = rect.right + 10 + 'px';
-        menu.style.top = rect.top + 'px';
-        menu.style.zIndex = '1000';
+        const top = Math.min(rect.bottom + 6, window.innerHeight - 130);
+        const left = Math.min(rect.right - 180, window.innerWidth - 200);
+        menu.style.left = Math.max(8, left) + 'px';
+        menu.style.top = top + 'px';
 
         document.body.appendChild(menu);
 
-        // Close menu when clicking elsewhere
         setTimeout(() => {
             document.addEventListener('click', this.hideUserMenu.bind(this), { once: true });
         }, 100);
@@ -224,34 +225,4 @@ export class AuthManager {
         }
     }
 
-    resetRole() {
-        if (state.socket) {
-            state.socket.disconnect();
-            state.socket = null;
-        }
-
-        state.currentTorrentInfo = null;
-        state.isLiveStream = false;
-        if (torrentManager) {
-            torrentManager.clearTorrentProgress();
-        }
-        state.lastMediaAction = null;
-        state.availableSubtitles = [];
-        state.selectedSubtitleId = null;
-        state.userRole = null;
-        state.userName = "Anonymous";
-        state.isConnected = false;
-
-        document.getElementById('mainApp').classList.add('hidden');
-        document.getElementById('roleSelector').classList.remove('hidden');
-        document.getElementById('torrentInfo').classList.add('hidden');
-
-        document.getElementById('torrentInput').value = '';
-        document.getElementById('fileInput').value = '';
-
-        // Hide user menu
-        this.hideUserMenu();
-
-        uiManager.updateMediaStatus('Select your access level to begin');
-    }
 }

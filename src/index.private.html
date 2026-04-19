@@ -1,325 +1,380 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ToSync Advanced</title>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mpegts.js@latest"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="theme.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+            integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.16"
+            integrity="sha384-5E8B0pTlZZJMabWpC0fyYf6OUpe15jJij34BqBAh4NXoHAlLNOjCPRrwtOXOQFAn"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.8.0"
+            integrity="sha384-lUyV7hLicoTyv6bvfYqrGlhj26lFlaig1x0rD5/ntvHk+jiOX2oUTbNjrVE4cUXQ"
+            crossorigin="anonymous"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#dc2626',
-                        secondary: '#64748b',
-                        dark: '#0f172a',
-                        surface: '#1e293b'
-                    }
-                }
-            }
-        }
-    </script>
 </head>
 
-<body class="min-h-screen flex flex-col bg-dark text-slate-200 antialiased font-[Inter]">
+<body class="min-h-screen antialiased">
 
-    <nav class="border-b border-white/10 bg-surface/50 backdrop-blur-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <div
-                    class="h-8 w-9 bg-primary rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/20 text-sm tracking-tight">
-                    Ta</div>
-                <h1 class="text-xl font-bold text-white">ToSync <span
-                        class="text-red-400 text-xs bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 tracking-wider">Advanced</span>
-                </h1>
+    <!-- ════════════════════════ NAV ════════════════════════ -->
+    <nav class="sticky top-0 z-40 backdrop-blur-md bg-neutral-950/75 border-b hairline">
+        <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-6 h-6 rounded-md bg-primary flex items-center justify-center text-neutral-950 text-[11px] font-bold">T</div>
+                <span class="text-sm font-semibold">ToSync</span>
+                <span class="text-[10px] text-neutral-500 font-medium px-1.5 py-0.5 rounded bg-neutral-900 border hairline">Advanced</span>
             </div>
-            <div class="flex items-center gap-4">
-                <button id="logoutBtn"
-                    class="hidden text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/10 hover:border-red-500/30 px-3 py-1.5 rounded transition">Logout</button>
+            <div class="flex items-center gap-2">
+                <button id="themeToggleBtn" title="Toggle light/dark"
+                    class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
+                    aria-label="Toggle theme">
+                    <svg data-theme-icon="dark" class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                    <svg data-theme-icon="light" class="hidden w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 5a1 1 0 0 1-1-1V2a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1zm0 14a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM5 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zm17 0a1 1 0 0 1-1 1h-2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zM6.05 7.46a1 1 0 0 1-1.42 0l-1.4-1.41a1 1 0 1 1 1.41-1.42l1.41 1.41a1 1 0 0 1 0 1.42zm12.73 12.73a1 1 0 0 1-1.42 0l-1.4-1.41a1 1 0 0 1 1.41-1.42l1.41 1.41a1 1 0 0 1 0 1.42zM6.05 16.54a1 1 0 0 1 0 1.42l-1.41 1.41a1 1 0 1 1-1.42-1.41l1.41-1.42a1 1 0 0 1 1.42 0zm12.73-12.73a1 1 0 0 1 0 1.42l-1.41 1.41a1 1 0 0 1-1.42-1.42l1.41-1.41a1 1 0 0 1 1.42 0zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
+                    </svg>
+                </button>
+                <button id="logoutBtn" class="hidden text-xs text-neutral-400 hover:text-neutral-100 transition">Sign out</button>
             </div>
         </div>
     </nav>
 
-    <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl">
+    <!-- ════════════════════════ MAIN ════════════════════════ -->
+    <main class="max-w-6xl mx-auto px-6 py-8">
 
+        <!-- ── Pre-auth landing (guest code entry + link to admin login) ── -->
         <div id="landingPage" class="hidden max-w-md mx-auto mt-12 fade-in">
-            <div class="bg-surface border border-white/5 rounded-2xl p-8 shadow-2xl">
-                <h2 class="text-2xl font-bold text-white mb-2 text-center">Guest Access</h2>
-                <p class="text-slate-400 text-center mb-6 text-sm">Enter the code provided by the host.</p>
-                <input type="text" id="roomCodeInput" placeholder="Room Code" maxlength="32"
-                    class="w-full bg-dark border border-slate-700 text-white text-center text-lg font-mono py-3 px-4 rounded-xl focus:ring-2 focus:ring-primary outline-none uppercase mb-4 transition">
+            <div class="surface border hairline rounded-2xl p-8 shadow-2xl">
+                <h2 class="text-2xl font-semibold text-neutral-100 mb-2 text-center">Join a room</h2>
+                <p class="text-neutral-400 text-center mb-6 text-sm">Enter the code shared by the host.</p>
+                <input type="text" id="roomCodeInput" placeholder="Room code" maxlength="{{ROOM_CODE_LENGTH}}"
+                    class="w-full bg-inset border hairline rounded-xl text-neutral-100 text-center text-lg font-mono py-3 px-4 focus-visible:outline-none uppercase mb-4 transition">
                 <button id="joinRoomBtn"
-                    class="w-full bg-primary hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg shadow-red-900/20">Join
-                    Room</button>
-                <div id="joinError" class="hidden mt-4 text-red-400 text-center text-sm">Invalid code</div>
-                <div class="mt-8 text-center pt-6 border-t border-white/5">
-                    <a href="/login" class="text-sm text-slate-500 hover:text-primary transition">Admin Login &rarr;</a>
+                    class="w-full bg-primary hover:opacity-90 text-neutral-950 font-semibold py-3 rounded-xl transition shadow-lg shadow-black/40">
+                    Join room
+                </button>
+                <div id="joinError" class="hidden mt-4 text-red-400 text-center text-sm">Invalid room code</div>
+                <div class="mt-8 text-center pt-6 border-t hairline">
+                    <a href="/login" class="text-sm text-neutral-500 hover:text-primary transition">
+                        Admin login →
+                    </a>
                 </div>
             </div>
         </div>
 
-        <div id="roomSelector" class="hidden max-w-4xl mx-auto fade-in">
-            <div class="flex justify-between items-center mb-8">
-                <div>
-                    <h2 class="text-3xl font-bold text-white">Welcome, <span id="loggedInUsername"
-                            class="text-primary">User</span></h2>
-                    <p class="text-slate-400">Select an option to begin.</p>
-                </div>
+        <!-- ── Authenticated admin landing (create / join cards) ── -->
+        <div id="roomSelector" class="hidden max-w-2xl mx-auto mt-8 fade-in">
+            <div class="mb-8">
+                <h2 class="text-2xl font-semibold text-neutral-100">
+                    Welcome, <span id="loggedInUsername" class="text-primary">admin</span>
+                </h2>
+                <p class="text-neutral-400 text-sm mt-1">Create a new room or join an existing one.</p>
             </div>
-            <div class="grid md:grid-cols-2 gap-6 room-options">
-                <div
-                    class="bg-surface border border-white/5 rounded-2xl p-6 hover:border-primary/50 transition group cursor-pointer">
-                    <h3 class="text-lg font-bold text-white mb-2">🎬 Create Room</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div class="surface border hairline rounded-xl p-5">
+                    <h3 class="text-base font-medium text-neutral-100 mb-3">Create room</h3>
+                    <p class="text-xs text-neutral-500 mb-4">Start a new session. You control playback.</p>
                     <button id="createRoomBtn"
-                        class="w-full bg-primary hover:bg-red-700 text-white py-2 rounded-lg font-semibold transition shadow-lg shadow-red-900/20">Create</button>
+                        class="w-full bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40">
+                        New room
+                    </button>
                 </div>
-                <div class="bg-surface border border-white/5 rounded-2xl p-6 hover:border-white/20 transition group">
-                    <h3 class="text-lg font-bold text-white mb-2">🔗 Join Room</h3>
-                    <input type="text" id="adminRoomCodeInput" placeholder="Room Code"
-                        class="w-full bg-dark border border-slate-700 rounded-lg px-3 py-2 mb-3 text-sm font-mono text-white focus:ring-1 focus:ring-primary outline-none">
+                <div class="surface border hairline rounded-xl p-5">
+                    <h3 class="text-base font-medium text-neutral-100 mb-3">Join room</h3>
+                    <input type="text" id="adminRoomCodeInput" placeholder="Room code" maxlength="{{ROOM_CODE_LENGTH}}"
+                        class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-sm font-mono py-2 px-3 mb-2 uppercase focus-visible:outline-none transition">
                     <button id="adminJoinRoomBtn"
-                        class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg font-semibold transition">Join</button>
-                    <div id="adminJoinError" class="hidden text-red-400 text-xs mt-2">Invalid code</div>
+                        class="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 font-semibold py-2.5 rounded-lg transition">
+                        Join
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div id="roomNotFound" class="hidden text-center py-20 fade-in">
-            <h3 class="text-2xl font-bold text-red-400 mb-2">Room Not Found</h3>
-            <span id="invalidRoomCode" class="font-mono text-slate-500 bg-white/5 px-2 py-1 rounded"></span>
-            <div class="mt-6"><button id="goBackHomeBtn" class="bg-slate-700 text-white px-4 py-2 rounded-lg">Go
-                    Back</button></div>
+        <!-- ── Room not found ── -->
+        <div id="roomNotFound" class="hidden max-w-md mx-auto mt-16 text-center fade-in">
+            <div class="text-4xl mb-4">🔒</div>
+            <h3 class="text-xl font-semibold text-neutral-100 mb-2">Room not found</h3>
+            <p class="text-neutral-400 mb-6 text-sm">
+                Code <span id="invalidRoomCode" class="font-mono text-neutral-100 bg-neutral-100/5 border hairline px-2 py-0.5 rounded"></span> is invalid or expired.
+            </p>
+            <button id="goBackHomeBtn"
+                class="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 px-6 py-2.5 rounded-lg text-sm transition">
+                Back to home
+            </button>
         </div>
 
+        <!-- ── Role selector mount point (empty; dynamic forms inject here via JS) ── -->
         <div id="roleSelector" class="hidden"></div>
 
+        <!-- ══════════════ MAIN ROOM VIEW ══════════════ -->
         <div id="mainApp" class="hidden fade-in">
-            <div id="connectionStatus" class="mb-4 text-center text-xs text-primary">Connecting...</div>
 
-            <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
-                <div class="flex items-center gap-3">
-                    <div class="flex items-center gap-2 bg-surface border border-white/5 px-3 py-1.5 rounded-lg">
-                        <div id="roleIndicator"
-                            class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"></div>
-                        <div id="userInfo" class="text-sm text-slate-300 font-medium"></div>
+            <!-- Identity strip -->
+            <section class="mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center gap-4 flex-wrap">
+                    <div id="connectionStatus" class="flex items-center gap-2 text-xs text-neutral-400">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Connecting…
                     </div>
-
+                    <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
+                    <div class="flex items-center gap-3">
+                        <div id="roleIndicator"
+                            class="admin-glow text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 rounded-full px-2.5 py-0.5 uppercase tracking-wider">
+                            Guest
+                        </div>
+                        <div id="userInfo" class="text-sm text-neutral-200">Anonymous</div>
+                    </div>
+                    <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
                     <button id="currentRoomCode"
-                        class="group flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 px-3 py-1.5 rounded-lg transition cursor-pointer"
+                        class="group flex items-center gap-2 text-sm font-mono hover:text-neutral-100 transition"
                         title="Click to copy URL">
-                        <span class="text-[10px] uppercase font-bold tracking-wider opacity-70">Room</span>
-                        <span class="font-mono font-bold text-sm">...</span>
-                        <span class="hidden group-hover:inline text-xs opacity-75">📋</span>
+                        <span class="text-neutral-500 text-[11px] uppercase tracking-wider">Room</span>
+                        <span class="text-neutral-200 font-semibold tracking-wider">...</span>
+                        <svg class="w-3 h-3 text-neutral-600 group-hover:text-primary transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                     </button>
                 </div>
 
-                <div class="flex gap-2">
-                    <button id="resetRoleBtn"
-                        class="hidden text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg transition">Switch</button>
+                <div class="flex items-center gap-4">
+                    <!-- Presence chips — usersList populated by uiManager.updateUsersList -->
+                    <div class="flex flex-col items-end gap-1">
+                        <div id="usersList" class="flex items-center -space-x-1.5"></div>
+                        <div id="connectedUsers" class="text-[10px] text-neutral-600 font-mono whitespace-nowrap">0 connected</div>
+                        <div id="adminUserInstructions" class="hidden"></div>
+                    </div>
+                    <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
                     <button id="leaveRoomBtn"
-                        class="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/10 hover:border-red-500/20 px-4 py-1.5 rounded-lg transition font-medium">Leave
-                        Room</button>
+                        class="text-xs text-neutral-400 hover:text-red-400 transition">
+                        Leave
+                    </button>
                 </div>
-            </div>
+            </section>
 
+            <!-- Grid -->
             <div class="grid lg:grid-cols-3 gap-6">
 
-                <div class="lg:col-span-2 space-y-4">
-                    <div
-                        class="relative bg-black rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 aspect-video">
-                        <video id="videoPlayer" class="w-full h-full" controls preload="metadata"
-                            crossorigin="anonymous"></video>
+                <!-- ═══ LEFT COLUMN ═══ -->
+                <div class="lg:col-span-2 space-y-0 min-w-0">
+
+                    <!-- Player + fused status strip -->
+                    <div class="surface border hairline rounded-t-xl overflow-hidden">
+                        <div class="relative bg-black aspect-video">
+                            <video id="videoPlayer" class="w-full h-full" controls preload="metadata" crossorigin="anonymous"></video>
+                        </div>
+                        <div class="flex items-center gap-3 px-4 py-2 text-xs border-t hairline">
+                            <span id="mediaStatus" class="flex-1 text-neutral-300 truncate">No media</span>
+                            <div class="w-24 h-0.5 bg-neutral-100/5 rounded-full overflow-hidden">
+                                <div id="progressFill" class="h-full bg-primary rounded-full progress-glow" style="width: 0%"></div>
+                            </div>
+                            <span id="roomStatus" class="text-emerald-500 font-mono text-[11px]">active</span>
+                            <span class="text-neutral-700">·</span>
+                            <span id="syncStatus" class="text-neutral-500 font-mono text-[11px]">ready</span>
+                            <span class="text-neutral-700">·</span>
+                            <span id="lastAction" class="text-neutral-500 font-mono text-[11px] truncate max-w-[10rem]">—</span>
+                        </div>
                     </div>
 
-                    <div
-                        class="bg-surface p-3 rounded-xl border border-white/5 flex flex-wrap gap-4 justify-center sm:justify-between items-center">
+                    <!-- Transport bar -->
+                    <div class="surface border border-t-0 hairline rounded-b-xl p-2 flex items-center gap-1 flex-wrap">
                         <button id="togglePlayBtn"
-                            class="bg-white text-dark hover:bg-slate-200 px-6 py-2 rounded-lg font-bold transition flex items-center gap-2">
-                            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
+                            class="flex items-center gap-2 bg-primary hover:opacity-90 text-neutral-950 text-sm font-medium px-5 py-2 rounded-lg transition">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                             <span>Play</span>
                         </button>
+                        <button id="seekBackBtn" title="−10s"
+                            class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
+                        </button>
+                        <button id="seekForwardBtn" title="+10s"
+                            class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
+                        </button>
 
-                        <div class="flex gap-2">
-                            <button id="seekBackBtn"
-                                class="bg-slate-700 hover:bg-slate-600 hover:text-primary text-white p-2.5 rounded-lg transition"
-                                title="-10s">
-                                <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                                    <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" />
-                                </svg>
+                        <div class="w-px h-5 bg-neutral-100/10 mx-1"></div>
+
+                        <!-- Subtitles popover -->
+                        <details id="subtitleSection" class="relative">
+                            <summary class="list-none cursor-pointer p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition flex items-center gap-1" title="Subtitles">
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>
+                                <span class="text-xs">CC</span>
+                            </summary>
+                            <div class="absolute top-full right-0 mt-2 w-80 surface border hairline rounded-xl shadow-2xl overflow-hidden z-30">
+                                <div class="px-4 py-2.5 border-b hairline text-xs text-neutral-400">Subtitle tracks</div>
+                                <div id="subtitlesList" class="divide-y divide-neutral-100/5 max-h-64 overflow-y-auto"></div>
+                                <div id="subtitleUploadForm" class="hidden p-3 border-t hairline space-y-2">
+                                    <div class="text-[10px] uppercase tracking-wider text-neutral-300">Upload track</div>
+                                    <input type="file" id="subtitleInput"
+                                        class="w-full text-xs text-neutral-400 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:bg-neutral-800 file:text-neutral-300 file:text-xs file:cursor-pointer">
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <input type="text" id="subtitleLanguage" placeholder="Lang"
+                                            class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none">
+                                        <input type="text" id="subtitleLabel" placeholder="Label"
+                                            class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none">
+                                    </div>
+                                    <button id="uploadSubtitleBtn"
+                                        class="w-full text-sm text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline py-1.5 rounded-lg transition">
+                                        Add subtitle
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
+
+                        <div class="w-px h-5 bg-neutral-100/10 mx-1"></div>
+
+                        <!-- Admin transport extras -->
+                        <div id="adminPlayerControls" class="hidden flex items-center gap-1">
+                            <button id="syncTimeBtn" title="Force sync"
+                                class="p-2 rounded-lg text-neutral-400 hover:text-primary hover:bg-neutral-100/5 transition">
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4C7.58 4 4 7.58 4 12s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
                             </button>
-                            <button id="seekForwardBtn"
-                                class="bg-slate-700 hover:bg-slate-600 hover:text-primary text-white p-2.5 rounded-lg transition"
-                                title="+10s">
-                                <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                                    <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
-                                </svg>
+                            <button id="restartBtn" title="Restart"
+                                class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
                             </button>
+                            <div class="flex items-center border hairline rounded-lg overflow-hidden ml-1">
+                                <button id="rate1Btn" class="px-2.5 py-1.5 text-xs font-mono bg-primary/20 text-primary transition">1×</button>
+                                <button id="rate15Btn" class="px-2.5 py-1.5 text-xs font-mono text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-100 transition">1.5×</button>
+                            </div>
                         </div>
 
-                        <button id="fullscreenBtn"
-                            class="bg-slate-700 hover:bg-slate-600 hover:text-primary text-white p-2.5 rounded-lg transition"
-                            title="Fullscreen">
-                            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                                <path
-                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
-                            </svg>
+                        <button id="fullscreenBtn" title="Fullscreen"
+                            class="ml-auto p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="bg-surface p-3 rounded border border-white/5">
-                            <p class="text-[10px] text-slate-500 font-bold uppercase">MEDIA</p>
-                            <p id="mediaStatus" class="text-xs text-white truncate">None</p>
-                            <div class="h-1 bg-slate-700 rounded mt-1 overflow-hidden">
-                                <div id="progressFill" class="h-full bg-primary w-0"></div>
+                    <!-- Torrent info — hidden until torrent loaded. torrentManager reveals. -->
+                    <div id="torrentInfo" class="hidden surface border hairline rounded-xl overflow-hidden mt-6">
+                        <div class="flex items-center justify-between px-4 py-3 border-b hairline">
+                            <div class="flex items-center gap-2">
+                                <div class="w-1 h-1 rounded-full bg-emerald-500"></div>
+                                <span class="text-sm font-medium text-neutral-200" id="torrentName">—</span>
+                                <span class="text-[11px] text-neutral-500 font-mono">torrent</span>
                             </div>
+                            <button id="removeTorrentBtn"
+                                class="text-xs text-neutral-500 hover:text-red-400 transition">Remove</button>
                         </div>
-                        <div class="bg-surface p-3 rounded border border-white/5">
-                            <p class="text-[10px] text-slate-500 font-bold uppercase">STATUS</p>
-                            <p id="roomStatus" class="text-xs text-primary">Active</p>
-                            <p id="connectedUsers" class="text-[10px] text-slate-400">0 users</p>
+                        <div class="flex items-center gap-6 px-4 py-2.5 text-xs border-b hairline flex-wrap">
+                            <div><span class="text-neutral-500">Speed </span><span id="downloadSpeed" class="font-mono text-neutral-200">—</span></div>
+                            <div><span class="text-neutral-500">Got </span><span id="downloaded" class="font-mono text-neutral-200">—</span></div>
+                            <div><span class="text-neutral-500">Peers </span><span id="numPeers" class="font-mono text-neutral-200">—</span></div>
+                            <div class="ml-auto"><span id="torrentSize" class="font-mono text-neutral-500">—</span></div>
                         </div>
-                        <div class="bg-surface p-3 rounded border border-white/5">
-                            <p class="text-[10px] text-slate-500 font-bold uppercase">SYNC</p>
-                            <p id="syncStatus" class="text-xs text-white">Ready</p>
-                            <p id="lastAction" class="text-[10px] text-slate-400">None</p>
-                        </div>
-                    </div>
-
-                    <div id="torrentInfo" class="hidden bg-slate-800/50 p-4 rounded-xl border border-white/5">
-                        <div class="flex justify-between items-center mb-3">
-                            <h3 class="text-xs font-bold text-emerald-400 uppercase">Torrent Stream Status</h3>
-                            <button id="removeTorrentBtn" class="text-[10px] text-red-400 hover:text-red-300 transition">Remove</button>
-                        </div>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs text-slate-300">
-                            <div><span class="block text-slate-500">Speed</span><span id="downloadSpeed">-</span></div>
-                            <div><span class="block text-slate-500">Downloaded</span><span id="downloaded">-</span>
-                            </div>
-                            <div><span class="block text-slate-500">Peers</span><span id="numPeers">-</span></div>
-                            <div><span class="block text-slate-500">Size</span><span id="torrentSize">-</span></div>
-                        </div>
-                        <div class="mt-2 text-xs truncate text-slate-400"><span class="text-slate-500">File:</span>
-                            <span id="torrentName">-</span>
-                        </div>
-                        <div id="fileList" class="mt-2"></div>
+                        <div id="fileList"></div>
                     </div>
                 </div>
 
-                <div class="space-y-4">
-
-                    <div id="adminControls"
-                        class="hidden bg-surface border border-primary/20 rounded-xl overflow-hidden">
-                        <div class="bg-primary/10 p-3 border-b border-primary/20">
-                            <h3 class="font-bold text-primary text-sm uppercase">Admin Panel</h3>
+                <!-- ═══ RIGHT SIDEBAR ═══ -->
+                <aside class="min-w-0">
+                    <div id="adminControls" class="hidden surface border hairline rounded-xl overflow-hidden sticky top-20">
+                        <div class="px-4 py-3 border-b hairline flex items-center justify-between">
+                            <span class="text-sm font-medium text-neutral-200">Source</span>
+                            <span class="text-[10px] text-neutral-500 font-mono">admin</span>
                         </div>
-                        <div class="p-3 space-y-4">
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">LOCAL FILE</label>
-                                <div class="flex gap-2">
-                                    <input type="file" id="fileInput"
-                                        accept=".mp4,.mkv,.avi,.webm,.mov,.m4v,.flv,.wmv,video/*"
-                                        class="text-xs text-slate-400 w-full" />
-                                    <button id="clearMediaBtn" class="text-red-400 text-xs">🗑️</button>
+
+                        <!-- Upload drop zone -->
+                        <div class="p-4 space-y-3">
+                            <label for="fileInput" class="block cursor-pointer">
+                                <div class="drop-zone border border-dashed hairline rounded-lg px-3 py-6 text-center transition">
+                                    <svg class="w-5 h-5 mx-auto mb-2 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.9A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12"/></svg>
+                                    <div class="text-sm text-neutral-300">Drop a video or <span class="text-primary">browse</span></div>
+                                    <div class="text-[11px] text-neutral-500 mt-1 font-mono">mp4 · mkv · webm · mov</div>
                                 </div>
+                                <input type="file" id="fileInput"
+                                    accept=".mp4,.mkv,.avi,.webm,.mov,.m4v,.flv,.wmv,video/*"
+                                    class="hidden">
+                            </label>
+
+                            <div class="flex gap-2">
                                 <button id="uploadBtn"
-                                    class="w-full mt-2 bg-slate-700 hover:bg-slate-600 text-white text-xs py-1.5 rounded">Stream
-                                    File</button>
+                                    class="flex-1 text-sm font-medium bg-primary hover:opacity-90 text-neutral-950 py-2 rounded-lg transition">
+                                    Upload &amp; stream
+                                </button>
+                                <button id="clearMediaBtn" title="Clear current media"
+                                    class="p-2 text-neutral-500 hover:text-red-400 hover:bg-neutral-100/5 border hairline rounded-lg transition">
+                                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                </button>
                             </div>
-                            <hr class="border-white/5">
-
-                            <div id="adminPlayerControls" class="grid grid-cols-2 gap-2">
-                                <button id="syncTimeBtn"
-                                    class="col-span-2 bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded transition">Force
-                                    Sync</button>
-                                <button id="restartBtn"
-                                    class="bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded transition">Restart</button>
-                                <div class="flex bg-slate-800 rounded">
-                                    <button id="rate1Btn"
-                                        class="flex-1 text-xs text-white hover:bg-slate-700 rounded-l transition">1x</button>
-                                    <button id="rate15Btn"
-                                        class="flex-1 text-xs text-white hover:bg-slate-700 rounded-r transition">1.5x</button>
-                                </div>
-                            </div>
-                            <hr class="border-white/5">
-
-                            <div>
-                                <label class="block text-[10px] font-bold text-emerald-500 mb-1">MAGNET LINK</label>
-                                <input type="text" id="torrentInput" placeholder="magnet:?xt=..."
-                                    class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                <button id="loadTorrentBtn"
-                                    class="w-full bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30 text-xs py-1.5 rounded transition">⚡
-                                    Stream Torrent</button>
-                            </div>
-                            <hr class="border-white/5">
-                            <div>
-                                <label class="block text-[10px] font-bold text-amber-400 mb-1">IPTV PLAYLIST</label>
-                                <input type="text" id="iptvPlaylistInput" placeholder="http://host/get.php?username=...&type=m3u_plus"
-                                    class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-amber-500 outline-none">
-                                <button id="loadPlaylistBtn"
-                                    class="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30 text-xs py-1.5 rounded transition">
-                                    Load Playlist</button>
-                                <div id="iptvBrowser" class="hidden mt-2"></div>
-                            </div>
-                            <hr class="border-white/5">
-                            <details class="group">
-                                <summary
-                                    class="cursor-pointer text-xs text-slate-400 hover:text-white flex justify-between">
-                                    <span>Subtitles</span><span>▼</span>
-                                </summary>
-                                <div class="pt-2 space-y-2">
-                                    <input type="file" id="subtitleInput" class="text-xs w-full" />
-                                    <input type="text" id="subtitleLanguage" placeholder="Lang"
-                                        class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary outline-none">
-                                    <input type="text" id="subtitleLabel" placeholder="Label"
-                                        class="w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary outline-none">
-                                    <button id="uploadSubtitleBtn"
-                                        class="w-full bg-slate-700 text-white text-xs py-1 rounded">Add</button>
-                                </div>
-                            </details>
-                            <details class="group">
-                                <summary
-                                    class="cursor-pointer text-xs text-slate-400 hover:text-white flex justify-between">
-                                    <span>Library</span><span>▼</span>
-                                </summary>
-                                <div class="pt-2">
-                                    <button id="refreshLibraryBtn"
-                                        class="text-xs text-primary hover:underline mb-2">Refresh</button>
-                                    <div id="uploadedFilesList" class="text-xs text-slate-300 mb-2"></div>
-                                    <div id="downloadedFilesList" class="text-xs text-emerald-400"></div>
-                                    <div id="libraryStatus" class="text-[10px] text-slate-500">Empty</div>
-                                </div>
-                            </details>
                         </div>
-                    </div>
 
-                    <div class="bg-surface border border-white/5 rounded-xl p-3">
-                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-2">Users</h3>
-                        <div id="usersList" class="space-y-1 text-xs text-slate-300 max-h-32 overflow-y-auto"></div>
-                        <div id="adminUserInstructions" class="hidden text-[10px] text-primary mt-2">Tip: Click user to
-                            manage.</div>
+                        <div class="border-t hairline"></div>
+
+                        <!-- Magnet link -->
+                        <div class="p-4 space-y-2">
+                            <div class="text-[10px] uppercase tracking-wider text-neutral-300">Magnet link</div>
+                            <input type="text" id="torrentInput" placeholder="magnet:?xt=urn:btih:…"
+                                class="w-full bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-3 py-2 placeholder:text-neutral-600 transition focus-visible:outline-none">
+                            <button id="loadTorrentBtn"
+                                class="w-full text-sm font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 py-2 rounded-lg transition">
+                                Stream torrent
+                            </button>
+                        </div>
+
+                        <div class="border-t hairline"></div>
+
+                        <!-- IPTV -->
+                        <div class="p-4 space-y-2">
+                            <div class="text-[10px] uppercase tracking-wider text-neutral-300">IPTV playlist</div>
+                            <input type="text" id="iptvPlaylistInput" placeholder="http://host/get.php?type=m3u_plus…"
+                                class="w-full bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-3 py-2 placeholder:text-neutral-600 transition focus-visible:outline-none">
+                            <button id="loadPlaylistBtn"
+                                class="w-full text-sm font-medium bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 py-2 rounded-lg transition">
+                                Load playlist
+                            </button>
+                        </div>
+
+                        <!-- IPTV channel browser — iptvManager reveals this after a
+                             playlist is loaded; group names come from the M3U. -->
+                        <div id="iptvBrowser" class="hidden border-t hairline"></div>
+
+                        <div class="border-t hairline"></div>
+
+                        <!-- Library (collapsed) -->
+                        <details class="group">
+                            <summary class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-neutral-100/[0.02] transition text-sm text-neutral-300 select-none">
+                                <div class="flex items-center gap-2">
+                                    <span>Library</span>
+                                    <span id="libraryStatus" class="text-xs text-neutral-500 font-mono">empty</span>
+                                </div>
+                                <svg class="w-3.5 h-3.5 fill-current text-neutral-500 group-open:rotate-90 transition" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
+                            </summary>
+                            <div class="px-4 pb-4">
+                                <button id="refreshLibraryBtn"
+                                    class="text-xs text-neutral-500 hover:text-primary mb-2 transition">
+                                    Refresh
+                                </button>
+                                <div id="uploadedFilesList" class="space-y-1 mb-3"></div>
+                                <div id="downloadedFilesList" class="space-y-1"></div>
+                            </div>
+                        </details>
                     </div>
-                    <div id="subtitleSection" class="bg-surface border border-white/5 rounded-xl p-3 hidden">
-                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-2">Subtitles</h3>
-                        <div id="subtitlesList" class="text-xs space-y-1"></div>
-                    </div>
-                </div>
+                </aside>
             </div>
         </div>
     </main>
 
-    <footer class="border-t border-white/5 mt-12 py-6 text-center text-xs text-slate-500">
-        <p class="text-slate-400 font-medium">ToSync Advanced <span class="text-slate-600">v{{VERSION}}</span></p>
-        <p class="mt-1">Watch together, stay connected</p>
+    <!-- Keyboard shortcuts discoverability pill (bottom-right) -->
+    <div id="shortcutsHint" class="hidden fixed bottom-4 right-4 z-30">
+        <button class="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-200 bg-neutral-900/80 backdrop-blur border hairline rounded-full px-3 py-1.5 transition">
+            <kbd class="font-mono text-[11px] text-neutral-400 bg-neutral-800 border hairline rounded px-1.5 py-0.5">?</kbd>
+            <span>shortcuts</span>
+        </button>
+    </div>
+
+    <!-- Toast stack — uiManager injects toasts here -->
+    <div id="toastStack" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)] pointer-events-none"></div>
+
+    <footer class="border-t hairline mt-12 py-6 text-center text-xs text-neutral-500">
+        <p class="text-neutral-400 font-medium">ToSync Advanced <span class="text-neutral-600">v{{VERSION}}</span></p>
+        <p class="mt-1 text-neutral-500">Watch together, stay connected</p>
         <div class="flex justify-center gap-4 mt-3">
             <a href="https://github.com/benpali/tosync" target="_blank" rel="noopener noreferrer"
                 class="hover:text-primary transition">GitHub</a>
@@ -328,9 +383,9 @@
             <a href="https://github.com/benpali/tosync/blob/main/README.md" target="_blank" rel="noopener noreferrer"
                 class="hover:text-primary transition">Docs</a>
         </div>
-        <p class="mt-3 text-slate-600">Built with ❤️ by Ben Pali &copy; 2025</p>
+        <p class="mt-3 text-neutral-600">❤️ by Ben Pali &middot; &copy; 2026</p>
     </footer>
+
     <script type="module" src="js/main.js"></script>
 </body>
-
 </html>

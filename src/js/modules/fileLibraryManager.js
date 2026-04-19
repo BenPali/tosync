@@ -33,15 +33,21 @@ export class FileLibraryManager {
     }
 
     displayFileLibrary(library) {
+        const emptyMsg = (text) => {
+            const el = document.createElement('div');
+            el.className = 'text-neutral-500 text-center py-2 italic text-xs';
+            el.textContent = text;
+            return el;
+        };
+
         const uploadedList = document.getElementById('uploadedFilesList');
         if (uploadedList) {
             uploadedList.innerHTML = '';
             if (library.uploads.length === 0) {
-                uploadedList.innerHTML = '<div class="text-slate-500 text-center py-2 italic text-xs">No uploaded files</div>';
+                uploadedList.appendChild(emptyMsg('No uploaded files'));
             } else {
                 library.uploads.forEach(file => {
-                    const fileItem = this.createLibraryFileItem(file, 'uploaded');
-                    uploadedList.appendChild(fileItem);
+                    uploadedList.appendChild(this.createLibraryFileItem(file, 'uploaded'));
                 });
             }
         }
@@ -50,51 +56,81 @@ export class FileLibraryManager {
         if (downloadedList) {
             downloadedList.innerHTML = '';
             if (library.downloads.length === 0) {
-                downloadedList.innerHTML = '<div class="text-slate-500 text-center py-2 italic text-xs">No downloaded files</div>';
+                downloadedList.appendChild(emptyMsg('No downloaded files'));
             } else {
                 library.downloads.forEach(file => {
-                    const fileItem = this.createLibraryFileItem(file, 'downloaded');
-                    downloadedList.appendChild(fileItem);
+                    downloadedList.appendChild(this.createLibraryFileItem(file, 'downloaded'));
                 });
             }
+        }
+
+        const status = document.getElementById('libraryStatus');
+        if (status) {
+            const total = (library.uploads?.length || 0) + (library.downloads?.length || 0);
+            status.textContent = total === 0 ? 'empty' : `${total} file${total !== 1 ? 's' : ''}`;
         }
     }
 
     createLibraryFileItem(file, type) {
         const fileItem = document.createElement('div');
-        fileItem.className = `library-file-item ${type} flex justify-between items-center p-2 mb-1 rounded text-xs cursor-pointer text-slate-300`;
+        fileItem.className = 'flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100/[0.02] transition cursor-pointer';
 
         const infoDiv = document.createElement('div');
-        infoDiv.className = 'flex-1 min-w-0 mr-2';
+        infoDiv.className = 'flex-1 min-w-0';
 
         const nameDiv = document.createElement('div');
-        nameDiv.className = 'font-medium truncate text-white';
+        nameDiv.className = 'text-sm truncate text-neutral-100';
         nameDiv.textContent = file.originalName;
         nameDiv.title = file.originalName;
         infoDiv.appendChild(nameDiv);
 
         const metaDiv = document.createElement('div');
-        metaDiv.className = 'flex gap-2 text-[10px] text-slate-500';
-        metaDiv.innerHTML = `<span class="text-emerald-500">${uiManager.formatBytes(file.size)}</span><span>${new Date(file.addedAt).toLocaleDateString()}</span>`;
+        metaDiv.className = 'flex items-center gap-2 text-xs text-neutral-500 font-mono';
+
+        const sizeSpan = document.createElement('span');
+        sizeSpan.textContent = uiManager.formatBytes(file.size);
+        metaDiv.appendChild(sizeSpan);
+
+        const sep1 = document.createElement('span');
+        sep1.className = 'text-neutral-700';
+        sep1.textContent = '·';
+        metaDiv.appendChild(sep1);
+
+        const typeSpan = document.createElement('span');
+        typeSpan.textContent = type === 'uploaded' ? 'uploaded' : 'downloaded';
+        metaDiv.appendChild(typeSpan);
+
+        const sep2 = document.createElement('span');
+        sep2.className = 'text-neutral-700';
+        sep2.textContent = '·';
+        metaDiv.appendChild(sep2);
+
+        const dateSpan = document.createElement('span');
+        dateSpan.textContent = new Date(file.addedAt).toLocaleDateString();
+        metaDiv.appendChild(dateSpan);
+
         if (type === 'downloaded' && file.folderName) {
+            const sep3 = document.createElement('span');
+            sep3.className = 'text-neutral-700';
+            sep3.textContent = '·';
+            metaDiv.appendChild(sep3);
             const folderSpan = document.createElement('span');
-            folderSpan.className = 'text-blue-400';
+            folderSpan.className = 'text-blue-400 truncate';
             folderSpan.textContent = file.folderName;
             metaDiv.appendChild(folderSpan);
         }
+
         infoDiv.appendChild(metaDiv);
 
         const playBtn = document.createElement('button');
-        playBtn.className = 'bg-primary/20 hover:bg-primary/40 text-primary px-2 py-1 rounded transition text-[10px] uppercase font-bold';
+        playBtn.className = 'text-xs text-primary hover:text-red-300 transition';
         playBtn.textContent = 'Play';
         playBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.playLibraryFile(file.url, file.originalName);
         });
 
-        fileItem.appendChild(infoDiv);
-        fileItem.appendChild(playBtn);
-
+        fileItem.append(infoDiv, playBtn);
         return fileItem;
     }
 
@@ -114,11 +150,10 @@ export class FileLibraryManager {
         const filename = urlParts[4];
 
         // Check codec compatibility
-        const socketId = state.socket ? state.socket.id : '';
         uiManager.updateMediaStatus(`Analyzing codecs...`);
 
         const codecs = await fetchCodecs({
-            source: 'upload', roomId, filename, socketId
+            source: 'upload', roomId, filename
         });
         const needs = codecs ? checkCodecSupport(codecs) : null;
 

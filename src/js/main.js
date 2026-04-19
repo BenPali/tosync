@@ -97,7 +97,23 @@ async function handleLogout() {
     }
 }
 
+function syncThemeIcons() {
+    const isLight = document.documentElement.classList.contains('light');
+    document.querySelectorAll('[data-theme-icon]').forEach(icon => {
+        const showInLight = icon.dataset.themeIcon === 'light';
+        icon.classList.toggle('hidden', showInLight !== isLight);
+    });
+}
+
 function setupUIEventListeners() {
+
+    // Theme toggle — theme.js handles the actual class swap + persistence.
+    const themeBtn = document.getElementById('themeToggleBtn');
+    if (themeBtn && typeof window.__tosyncToggleTheme === 'function') {
+        themeBtn.addEventListener('click', () => window.__tosyncToggleTheme());
+    }
+    document.addEventListener('theme-change', syncThemeIcons);
+    syncThemeIcons();
 
     if (config.ENABLE_TORRENTS) {
         const logoutBtn = document.getElementById('logoutBtn');
@@ -123,10 +139,11 @@ function setupUIEventListeners() {
         badge.addEventListener('click', () => {
             const roomUrl = `${window.location.origin}/${state.currentRoomId}`;
             navigator.clipboard.writeText(roomUrl).then(() => {
-                const originalText = badge.textContent;
-            badge.textContent = 'URL Copied!';
-                setTimeout(() => badge.textContent = originalText, 2000);
-            }).catch(err => console.error('Failed to copy:', err));
+                uiManager.toast('success', 'Room URL copied');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                uiManager.toast('error', 'Could not copy URL');
+            });
         });
     }
 
@@ -139,7 +156,6 @@ function setupUIEventListeners() {
     addListener('uploadBtn', () => mediaManager.uploadFile());
     addListener('clearMediaBtn', () => mediaManager.clearMedia());
     addListener('uploadSubtitleBtn', () => subtitleManager.uploadSubtitle());
-    addListener('resetRoleBtn', () => authManager.resetRole());
     addListener('refreshLibraryBtn', () => fileLibraryManager.loadFileLibrary());
 
     addListener('togglePlayBtn', () => videoPlayer.togglePlay());
@@ -192,14 +208,30 @@ function setupUIEventListeners() {
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.target.tagName.toLowerCase() !== 'input') {
-            switch (e.code) {
-                case 'Space': e.preventDefault(); videoPlayer.togglePlay(); break;
-                case 'ArrowLeft': e.preventDefault(); videoPlayer.seekBackward(); break;
-                case 'ArrowRight': e.preventDefault(); videoPlayer.seekForward(); break;
-                case 'KeyF': e.preventDefault(); videoPlayer.toggleFullscreen(); break;
-                case 'KeyS': e.preventDefault(); subtitleManager.toggleSubtitles(); break;
-            }
+        // Esc always closes the shortcut overlay, even when focus is on input
+        if (e.key === 'Escape') {
+            const overlay = document.getElementById('shortcutsOverlay');
+            if (overlay) { e.preventDefault(); uiManager.hideShortcutsOverlay(); return; }
+        }
+        // e.target can be the document (no tagName) when an event is dispatched
+        // programmatically. Guard with optional chaining.
+        const tag = (e.target?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+        switch (e.code) {
+            case 'Space': e.preventDefault(); videoPlayer.togglePlay(); break;
+            case 'ArrowLeft': e.preventDefault(); videoPlayer.seekBackward(); break;
+            case 'ArrowRight': e.preventDefault(); videoPlayer.seekForward(); break;
+            case 'KeyF': e.preventDefault(); videoPlayer.toggleFullscreen(); break;
+            case 'KeyS': e.preventDefault(); subtitleManager.toggleSubtitles(); break;
+            case 'Slash':
+                if (e.shiftKey) { e.preventDefault(); uiManager.showShortcutsOverlay(); }
+                break;
         }
     });
+
+    // "?" shortcuts pill click → overlay
+    const shortcutsHint = document.getElementById('shortcutsHint');
+    if (shortcutsHint) {
+        shortcutsHint.addEventListener('click', () => uiManager.showShortcutsOverlay());
+    }
 }

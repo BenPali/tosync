@@ -96,11 +96,10 @@ export class TorrentManager {
         state.videoPlayer.onerror = null;
 
         // Check codec compatibility
-        const socketId = state.socket ? state.socket.id : '';
         uiManager.updateMediaStatus(`Analyzing codecs...`);
 
         const codecs = await fetchCodecs({
-            source: 'torrent', infoHash, fileIndex, socketId
+            source: 'torrent', infoHash, fileIndex
         });
 
         const needs = codecs ? checkCodecSupport(codecs) : null;
@@ -121,7 +120,7 @@ export class TorrentManager {
             };
         } else {
             // Compatible — raw stream
-            const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream?socketId=${socketId}`;
+            const streamUrl = `/api/torrents/${infoHash}/files/${fileIndex}/stream`;
             state.videoPlayer.src = streamUrl;
             state.videoPlayer.load();
 
@@ -162,7 +161,10 @@ export class TorrentManager {
         fileList.innerHTML = '';
 
         if (files.length === 0) {
-            fileList.innerHTML = '<p class="text-xs text-slate-600 italic">No video files found.</p>';
+            const empty = document.createElement('p');
+            empty.className = 'text-xs text-neutral-600 italic p-4';
+            empty.textContent = 'No video files found.';
+            fileList.appendChild(empty);
             return;
         }
 
@@ -184,8 +186,13 @@ export class TorrentManager {
                 if (sorted.length === 1) details.open = true;
 
                 const summary = document.createElement('summary');
-                summary.className = 'cursor-pointer text-xs font-bold text-slate-400 hover:text-white flex justify-between items-center p-2 select-none';
-                summary.innerHTML = `<span>${season === 0 ? 'Other Files' : `Season ${season}`}</span><span class="text-slate-600 text-[10px]">${items.length} ep</span>`;
+                summary.className = 'cursor-pointer text-xs text-neutral-400 hover:text-neutral-100 flex justify-between items-center px-4 py-2.5 hover:bg-neutral-100/[0.02] transition select-none';
+                const seasonLabel = document.createElement('span');
+                seasonLabel.textContent = season === 0 ? 'Other files' : `Season ${season}`;
+                const epCount = document.createElement('span');
+                epCount.className = 'text-neutral-600 font-mono text-[10px]';
+                epCount.textContent = `${items.length} episode${items.length !== 1 ? 's' : ''}`;
+                summary.append(seasonLabel, epCount);
                 details.appendChild(summary);
 
                 const list = document.createElement('div');
@@ -207,20 +214,20 @@ export class TorrentManager {
 
     _createFileRow(file, isAdmin) {
         const row = document.createElement('div');
-        row.className = 'flex items-center gap-2 p-2 rounded hover:bg-white/5 transition text-xs group';
+        row.className = 'flex items-center gap-2 p-2 rounded hover:bg-neutral-100/5 transition text-xs group';
         row.dataset.fileIndex = file.index;
 
         const label = document.createElement('span');
-        label.className = 'truncate flex-1 text-slate-300 min-w-0';
+        label.className = 'truncate flex-1 text-neutral-300 min-w-0';
         label.textContent = buildEpisodeLabel(file);
         label.title = file.name;
 
         const size = document.createElement('span');
-        size.className = 'text-slate-600 whitespace-nowrap text-[10px] shrink-0';
+        size.className = 'text-neutral-600 whitespace-nowrap text-[10px] shrink-0';
         size.textContent = uiManager.formatBytes(file.length);
 
         const progressWrap = document.createElement('div');
-        progressWrap.className = 'hidden w-16 h-1 bg-slate-700 rounded overflow-hidden shrink-0';
+        progressWrap.className = 'hidden w-16 h-1 bg-neutral-700 rounded overflow-hidden shrink-0';
         progressWrap.dataset.role = 'progress-wrap';
         const progressBar = document.createElement('div');
         progressBar.className = 'h-full bg-emerald-500 transition-all duration-300';
@@ -237,7 +244,7 @@ export class TorrentManager {
 
         if (isAdmin) {
             const dlBtn = document.createElement('button');
-            dlBtn.className = 'px-2 py-0.5 rounded text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 transition';
+            dlBtn.className = 'px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition';
             dlBtn.textContent = 'DL';
             dlBtn.title = 'Download without playing';
             dlBtn.dataset.role = 'dl-btn';
@@ -260,7 +267,7 @@ export class TorrentManager {
             buttons.appendChild(stopBtn);
         } else {
             const badge = document.createElement('span');
-            badge.className = 'text-[10px] text-slate-600';
+            badge.className = 'text-[10px] text-neutral-600';
             badge.textContent = 'view only';
             buttons.appendChild(badge);
         }
@@ -370,7 +377,7 @@ export class TorrentManager {
             if (label) {
                 label.className = isPlaying
                     ? 'truncate flex-1 text-emerald-400 font-bold min-w-0'
-                    : 'truncate flex-1 text-slate-300 min-w-0';
+                    : 'truncate flex-1 text-neutral-300 min-w-0';
             }
 
             // Progress bar
@@ -474,13 +481,12 @@ export class TorrentManager {
         // Check codec support — use codecs from broadcast if available
         const codecs = info.codecs || null;
         const needs = codecs ? checkCodecSupport(codecs) : null;
-        const socketId = state.socket ? state.socket.id : '';
 
         if (needs) {
             const hlsUrl = buildHlsUrl({ source: 'torrent', infoHash: info.infoHash, fileIndex: info.fileIndex }, needs);
             startHlsPlayback(hlsUrl);
         } else {
-            state.videoPlayer.src = `/api/torrents/${info.infoHash}/files/${info.fileIndex}/stream?socketId=${socketId}`;
+            state.videoPlayer.src = `/api/torrents/${info.infoHash}/files/${info.fileIndex}/stream`;
         }
 
         state.videoPlayer.currentTime = videoState.currentTime || 0;

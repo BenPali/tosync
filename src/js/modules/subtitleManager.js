@@ -152,57 +152,56 @@ export class SubtitleManager {
     updateSubtitlesList() {
         const subtitlesList = document.getElementById('subtitlesList');
         if (!subtitlesList) return;
-
         subtitlesList.innerHTML = '';
 
-        const getClasses = (isSelected) => {
-            let base = 'cursor-pointer p-2 rounded flex justify-between items-center text-xs transition mb-1 ';
-            if (isSelected) return base + 'bg-primary text-white font-bold';
-            return base + 'text-slate-300 hover:bg-white/10';
+        // Rows render inside the CC popover (narrow). Uniform row style:
+        //   selected → primary-tinted bg + left accent dot
+        //   hover → faint white wash
+        const makeRow = ({ selected, onclick }) => {
+            const row = document.createElement('div');
+            row.className = selected
+                ? 'flex items-center gap-3 px-4 py-2.5 bg-primary/[0.08] cursor-pointer'
+                : 'flex items-center gap-3 px-4 py-2.5 hover:bg-neutral-100/[0.03] cursor-pointer transition';
+            row.addEventListener('click', onclick);
+            return row;
+        };
+        const dot = (color) => {
+            const d = document.createElement('span');
+            d.className = `w-1.5 h-1.5 rounded-full ${color}`;
+            return d;
         };
 
-        // Search bar when many subtitles
-        if (state.availableSubtitles.length > 5) {
-            const search = document.createElement('input');
-            search.type = 'text';
-            search.placeholder = 'Search subtitles...';
-            search.className = 'w-full bg-dark border border-slate-700 rounded px-2 py-1 text-xs mb-2 text-slate-300 focus:ring-1 focus:ring-primary outline-none';
-            search.addEventListener('input', (e) => {
-                const q = e.target.value.toLowerCase();
-                subtitlesList.querySelectorAll('[data-subtitle-item]').forEach(el => {
-                    const match = !q || el.dataset.subtitleItem.toLowerCase().includes(q);
-                    el.classList.toggle('hidden', !match);
-                });
-            });
-            subtitlesList.appendChild(search);
-        }
+        // "Off" row always first
+        const offSelected = state.selectedSubtitleId === 'none' || !state.selectedSubtitleId;
+        const offRow = makeRow({ selected: offSelected, onclick: () => this.selectSubtitle('none') });
+        offRow.append(dot(offSelected ? 'bg-primary' : 'bg-neutral-700'));
+        const offLabel = document.createElement('span');
+        offLabel.className = 'flex-1 text-sm ' + (offSelected ? 'text-neutral-100' : 'text-neutral-400');
+        offLabel.textContent = 'Off';
+        offRow.appendChild(offLabel);
+        subtitlesList.appendChild(offRow);
 
-        const noSubtitleOption = document.createElement('div');
-        noSubtitleOption.className = getClasses(state.selectedSubtitleId === 'none');
-        noSubtitleOption.onclick = () => this.selectSubtitle('none');
-        noSubtitleOption.innerHTML = `
-            <span>No Subtitles</span>
-            <span class="${state.selectedSubtitleId === 'none' ? 'text-blue-100' : 'text-slate-500'} text-[10px] uppercase">Off</span>
-        `;
-        subtitlesList.appendChild(noSubtitleOption);
-
+        // One row per available subtitle
         state.availableSubtitles.forEach(subtitle => {
-            const subtitleOption = document.createElement('div');
-            subtitleOption.className = getClasses(state.selectedSubtitleId === subtitle.filename);
-            subtitleOption.dataset.subtitleItem = `${subtitle.label} ${subtitle.language}`;
-            subtitleOption.onclick = () => this.selectSubtitle(subtitle.filename);
-            subtitleOption.innerHTML = `
-                <span class="truncate mr-2">${subtitle.label}</span>
-                <span class="${state.selectedSubtitleId === subtitle.filename ? 'text-blue-100' : 'text-slate-500'} text-[10px] whitespace-nowrap">${subtitle.language}</span>
-            `;
-            subtitlesList.appendChild(subtitleOption);
-        });
+            const selected = state.selectedSubtitleId === subtitle.filename;
+            const row = makeRow({ selected, onclick: () => this.selectSubtitle(subtitle.filename) });
+            row.dataset.subtitleItem = `${subtitle.label} ${subtitle.language}`;
 
-        const subtitleSection = document.getElementById('subtitleSection');
-        if (subtitleSection) {
-            if (state.availableSubtitles.length > 0) subtitleSection.classList.remove('hidden');
-            else subtitleSection.classList.add('hidden');
-        }
+            row.append(dot(selected ? 'bg-primary' : 'bg-neutral-700'));
+
+            const labelEl = document.createElement('span');
+            labelEl.className = 'flex-1 text-sm truncate ' + (selected ? 'text-neutral-100' : 'text-neutral-300');
+            labelEl.textContent = subtitle.label;
+
+            const langEl = document.createElement('span');
+            langEl.className = 'text-[10px] font-mono ' + (selected ? 'text-primary' : 'text-neutral-500');
+            langEl.textContent = subtitle.language || 'und';
+
+            row.append(labelEl, langEl);
+            subtitlesList.appendChild(row);
+        });
+        // subtitleSection visibility is NOT toggled — CC button is always present
+        // in the transport bar; an empty list just shows "Off" + the upload form.
     }
 
     clearSubtitles() {
