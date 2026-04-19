@@ -16,6 +16,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import { execFile, spawn } from 'child_process';
 import crypto from 'crypto';
 import dns from 'dns';
+import { Agent as UndiciAgent } from 'undici';
 import ptt from 'parse-torrent-title';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1015,6 +1016,17 @@ if (ENABLE_TORRENTS) {
         return false;
     };
 
+    // SSRF-safe fetch dispatcher: forces TCP connect to the already-validated IP
+    // while keeping the URL hostname intact so TLS SNI + Host header stay correct.
+    const ipLockedDispatcher = (lookupResults) => new UndiciAgent({
+        connect: {
+            lookup: (_hostname, _options, cb) => {
+                const addr = lookupResults[0];
+                cb(null, addr.address, addr.family);
+            },
+        },
+    });
+
     app.post('/api/stream/start', requireAdmin, async (req, res) => {
         const { streamUrl: directStreamUrl, channelId, roomId } = req.body;
 
@@ -1068,23 +1080,14 @@ if (ENABLE_TORRENTS) {
                 }
             }
 
-            const targetIp = lookup[0].address;
-            const targetUrl = new URL(streamUrl);
-
-            if (lookup[0].family === 6) {
-                targetUrl.hostname = `[${targetIp}]`;
-            } else {
-                targetUrl.hostname = targetIp;
-            }
-
             const controller = new AbortController();
 
-            const response = await fetch(targetUrl.toString(), {
+            const response = await fetch(streamUrl, {
                 signal: controller.signal,
                 redirect: 'manual',
+                dispatcher: ipLockedDispatcher(lookup),
                 headers: {
-                    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
-                    'Host': urlObj.hostname
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
@@ -1145,12 +1148,12 @@ if (ENABLE_TORRENTS) {
                         const newController = new AbortController();
                         streamInfo.controller = newController;
 
-                        const reconnectResponse = await fetch(targetUrl.toString(), {
+                        const reconnectResponse = await fetch(streamUrl, {
                             signal: newController.signal,
                             redirect: 'manual',
+                            dispatcher: ipLockedDispatcher(lookup),
                             headers: {
-                                'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
-                                'Host': urlObj.hostname
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                             }
                         });
 
@@ -1266,24 +1269,15 @@ if (ENABLE_TORRENTS) {
                 }
             }
 
-            const targetIp = lookup[0].address;
-            const targetUrl = new URL(playlistUrl);
-
-            if (lookup[0].family === 6) {
-                targetUrl.hostname = `[${targetIp}]`;
-            } else {
-                targetUrl.hostname = targetIp;
-            }
-
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 300000);
 
-            const response = await fetch(targetUrl.toString(), {
+            const response = await fetch(playlistUrl, {
                 signal: controller.signal,
                 redirect: 'manual',
+                dispatcher: ipLockedDispatcher(lookup),
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                    'Host': urlObj.hostname
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
@@ -1433,26 +1427,17 @@ if (ENABLE_TORRENTS) {
                 }
             }
 
-            const targetIp = lookup[0].address;
-            const targetUrl = new URL(streamUrl);
-
-            if (lookup[0].family === 6) {
-                targetUrl.hostname = `[${targetIp}]`;
-            } else {
-                targetUrl.hostname = targetIp;
-            }
-
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 30000);
 
-            console.log(`Proxy streaming from: ${urlObj.hostname} (${targetIp})`);
+            console.log(`Proxy streaming from: ${urlObj.hostname} (${lookup[0].address})`);
 
-            const response = await fetch(targetUrl.toString(), {
+            const response = await fetch(streamUrl, {
                 signal: controller.signal,
                 redirect: 'manual',
+                dispatcher: ipLockedDispatcher(lookup),
                 headers: {
-                    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
-                    'Host': urlObj.hostname
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
