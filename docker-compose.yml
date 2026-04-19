@@ -47,6 +47,7 @@ services:
     depends_on:
       gluetun:
         condition: service_healthy
+        restart: true
     restart: unless-stopped
     logging:
       driver: "json-file"
