@@ -2193,6 +2193,27 @@ io.on('connection', (socket) => {
             users: Array.from(room.users.values()),
             userCount: room.users.size
         });
+
+        // If a non-admin just joined while media is active, ask the admin for
+        // their current playback position so the newcomer lands in-sync.
+        if (finalRole !== 'admin' && room.adminId && room.currentMedia) {
+            io.to(room.adminId).emit('sync-request', { targetSocketId: socket.id });
+        }
+    });
+
+    // Admin replies to sync-request with their authoritative video state;
+    // server forwards as a force-sync to only the requesting guest.
+    socket.on('sync-response', (data) => {
+        const admin = users.get(socket.id);
+        if (!admin || admin.role !== 'admin') return;
+        const { targetSocketId, time, isPlaying, playbackRate } = data || {};
+        if (!targetSocketId) return;
+        io.to(targetSocketId).emit('force-sync', {
+            time: time || 0,
+            isPlaying: !!isPlaying,
+            playbackRate: playbackRate || 1,
+            user: admin.name
+        });
     });
 
     socket.on('video-action', (data) => {

@@ -114,17 +114,41 @@ export class SocketManager {
 
         state.socket.on('force-sync', (data) => {
             if (state.isLiveStream) return;
-            state.isReceivingSync = true;
-            state.videoPlayer.currentTime = data.time;
-            if (data.isPlaying && state.videoPlayer.paused) {
-                state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
-            } else if (!data.isPlaying && !state.videoPlayer.paused) {
-                state.videoPlayer.pause();
+
+            const apply = () => {
+                state.isReceivingSync = true;
+                state.videoPlayer.currentTime = data.time;
+                if (typeof data.playbackRate === 'number') {
+                    state.videoPlayer.playbackRate = data.playbackRate;
+                }
+                if (data.isPlaying && state.videoPlayer.paused) {
+                    state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
+                } else if (!data.isPlaying && !state.videoPlayer.paused) {
+                    state.videoPlayer.pause();
+                }
+                uiManager.updateLastAction(`${data.user} forced sync`);
+                setTimeout(() => { state.isReceivingSync = false; }, 100);
+            };
+
+            // Seeks are no-ops until the video has seekable metadata.
+            if (state.videoPlayer.readyState >= 1) {
+                apply();
+            } else {
+                state.videoPlayer.addEventListener('loadedmetadata', apply, { once: true });
             }
-            uiManager.updateLastAction(`${data.user} forced sync`);
-            setTimeout(() => {
-                state.isReceivingSync = false;
-            }, 100);
+        });
+
+        // Admin: answer a server-initiated sync-request with our current video state.
+        state.socket.on('sync-request', (data) => {
+            if (state.userRole !== 'admin') return;
+            if (state.isLiveStream) return;
+            const v = state.videoPlayer;
+            state.socket.emit('sync-response', {
+                targetSocketId: data?.targetSocketId,
+                time: v.currentTime,
+                isPlaying: !v.paused,
+                playbackRate: v.playbackRate
+            });
         });
 
         state.socket.on('error', (data) => {
