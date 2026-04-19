@@ -532,6 +532,13 @@ if (ENABLE_TORRENTS) {
                     if (!t.ready) {
                         await new Promise(resolve => t.once('ready', resolve));
                     }
+                    // Register this room as a consumer of the shared torrent so
+                    // cleanup only destroys it when the last room leaves, and
+                    // auth/file-selection is per-room rather than first-room-wins.
+                    tracked.rooms.add(roomId);
+                    if (!tracked.selectedFilesByRoom.has(roomId)) {
+                        tracked.selectedFilesByRoom.set(roomId, new Set());
+                    }
                     const videoFiles = t.files
                         .map((f, i) => ({ file: f, index: i }))
                         .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()));
@@ -572,9 +579,10 @@ if (ENABLE_TORRENTS) {
 
             activeTorrents.set(torrent.infoHash, {
                 torrent,
-                roomId,
+                rooms: new Set([roomId]),
+                ownerRoomId: roomId, // room that triggered the initial download — owns the on-disk path
                 addedAt: Date.now(),
-                selectedFiles: new Set()
+                selectedFilesByRoom: new Map([[roomId, new Set()]])
             });
 
             const videoFiles = torrent.files
@@ -601,9 +609,10 @@ if (ENABLE_TORRENTS) {
                     }
                     activeTorrents.set(existing.infoHash, {
                         torrent: existing,
-                        roomId,
+                        rooms: new Set([roomId]),
+                        ownerRoomId: roomId,
                         addedAt: Date.now(),
-                        selectedFiles: new Set()
+                        selectedFilesByRoom: new Map([[roomId, new Set()]])
                     });
                     const videoFiles = existing.files
                         .map((f, i) => ({ file: f, index: i }))
@@ -622,13 +631,31 @@ if (ENABLE_TORRENTS) {
         }
     });
 
+    // Room-scoped helper: only rooms the caller is actually in can see/modify torrent state.
+    const roomSelectedFiles = (torrentInfo, roomId) => {
+        if (!torrentInfo.selectedFilesByRoom.has(roomId)) {
+            torrentInfo.selectedFilesByRoom.set(roomId, new Set());
+        }
+        return torrentInfo.selectedFilesByRoom.get(roomId);
+    };
+
+    // Returns true if ANY room (not this one) still has fileIndex selected.
+    const fileSelectedByOtherRoom = (torrentInfo, roomId, fileIndex) => {
+        for (const [otherRoomId, selected] of torrentInfo.selectedFilesByRoom) {
+            if (otherRoomId !== roomId && selected.has(fileIndex)) return true;
+        }
+        return false;
+    };
+
     app.get('/api/torrents/:infoHash/status', requireAdmin, (req, res) => {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) {
             return res.status(404).json({ error: 'Torrent not found' });
         }
 
-        const { torrent, selectedFiles } = torrentInfo;
+        const callerRoom = req.session?.roomId;
+        const selectedForRoom = callerRoom ? roomSelectedFiles(torrentInfo, callerRoom) : new Set();
+        const { torrent } = torrentInfo;
         res.json({
             infoHash: torrent.infoHash,
             name: torrent.name,
@@ -641,7 +668,7 @@ if (ENABLE_TORRENTS) {
             files: torrent.files
                 .map((f, i) => ({ file: f, index: i }))
                 .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()))
-                .map(({ file, index }) => ({ ...parseFileInfo(file, index), downloaded: file.downloaded, progress: file.progress, done: file.done, selected: selectedFiles.has(index) }))
+                .map(({ file, index }) => ({ ...parseFileInfo(file, index), downloaded: file.downloaded, progress: file.progress, done: file.done, selected: selectedForRoom.has(index) }))
         });
     });
 
@@ -649,12 +676,17 @@ if (ENABLE_TORRENTS) {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
+        const callerRoom = req.session?.roomId;
+        if (!callerRoom || !torrentInfo.rooms.has(callerRoom)) {
+            return res.status(403).json({ error: 'Torrent not loaded in your room' });
+        }
+
         const file = torrentInfo.torrent.files[parseInt(req.params.fileIndex)];
         if (!file) return res.status(404).json({ error: 'File not found' });
 
         const idx = parseInt(req.params.fileIndex);
         file.select();
-        torrentInfo.selectedFiles.add(idx);
+        roomSelectedFiles(torrentInfo, callerRoom).add(idx);
         if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
         res.json({ index: idx, name: file.name, progress: file.progress, done: file.done });
     });
@@ -663,12 +695,20 @@ if (ENABLE_TORRENTS) {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
+        const callerRoom = req.session?.roomId;
+        if (!callerRoom || !torrentInfo.rooms.has(callerRoom)) {
+            return res.status(403).json({ error: 'Torrent not loaded in your room' });
+        }
+
         const file = torrentInfo.torrent.files[parseInt(req.params.fileIndex)];
         if (!file) return res.status(404).json({ error: 'File not found' });
 
         const idx = parseInt(req.params.fileIndex);
-        file.deselect();
-        torrentInfo.selectedFiles.delete(idx);
+        roomSelectedFiles(torrentInfo, callerRoom).delete(idx);
+        // Only release at the webtorrent level when no other room still wants it.
+        if (!fileSelectedByOtherRoom(torrentInfo, callerRoom, idx)) {
+            file.deselect();
+        }
         res.json({ index: idx, name: file.name, progress: file.progress, done: file.done });
     });
 
@@ -676,14 +716,38 @@ if (ENABLE_TORRENTS) {
         const torrentInfo = activeTorrents.get(req.params.infoHash);
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
-        clearExtractionWatchers(req.params.infoHash);
+        const callerRoom = req.session?.roomId;
+        const infoHash = req.params.infoHash;
+
+        // If other rooms still share this torrent, just detach this room —
+        // don't destroy the underlying torrent or storage.
+        if (callerRoom && torrentInfo.rooms.has(callerRoom) && torrentInfo.rooms.size > 1) {
+            const mySelections = torrentInfo.selectedFilesByRoom.get(callerRoom);
+            if (mySelections) {
+                for (const idx of mySelections) {
+                    if (!fileSelectedByOtherRoom(torrentInfo, callerRoom, idx)) {
+                        torrentInfo.torrent.files[idx]?.deselect();
+                    }
+                }
+            }
+            torrentInfo.rooms.delete(callerRoom);
+            torrentInfo.selectedFilesByRoom.delete(callerRoom);
+            // Clean up HLS transcode sessions scoped to this room for this torrent.
+            const roomPrefix = `torrent-${callerRoom}-${infoHash}-`;
+            [...hlsSessions.keys()]
+                .filter(k => k.startsWith(roomPrefix))
+                .forEach(k => stopHlsSession(k));
+            return res.json({ ok: true, detached: true });
+        }
+
+        clearExtractionWatchers(infoHash);
         // Clean up any HLS transcode sessions for this torrent (new key format is
         // torrent-${roomId}-${infoHash}-${fileIndex}-${needs} — match on infoHash segment)
-        const infoHashSegment = `-${req.params.infoHash}-`;
+        const infoHashSegment = `-${infoHash}-`;
         [...hlsSessions.keys()]
             .filter(k => k.startsWith('torrent-') && k.includes(infoHashSegment))
             .forEach(k => stopHlsSession(k));
-        activeTorrents.delete(req.params.infoHash);
+        activeTorrents.delete(infoHash);
         await new Promise(resolve => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
         res.json({ ok: true });
     });
@@ -870,9 +934,9 @@ if (ENABLE_TORRENTS) {
             return res.status(404).json({ error: 'Torrent not found' });
         }
 
-        const roomId = torrentInfo.roomId;
         const isAdmin = !!(req.session && req.session.isAdmin);
-        const isRoomMember = !!(req.session && req.session.roomId === roomId);
+        const callerRoom = req.session?.roomId;
+        const isRoomMember = !!(callerRoom && torrentInfo.rooms.has(callerRoom));
 
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
@@ -886,8 +950,10 @@ if (ENABLE_TORRENTS) {
         file.select();
         if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
 
-        // Extract embedded subtitles in background (fire-and-forget)
-        extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), roomId).catch(e =>
+        // Extract embedded subtitles in background (fire-and-forget). Target
+        // the caller's room so subtitles end up in their state; falls back to
+        // the torrent's owner room if somehow unset.
+        extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), callerRoom || torrentInfo.ownerRoomId).catch(e =>
             console.error('Subtitle extraction failed:', e.message)
         );
 
@@ -1536,7 +1602,10 @@ app.get('/api/codecs', async (req, res) => {
             const torrentInfo = activeTorrents.get(infoHash);
             if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
-            if (!checkRoomMember(torrentInfo.roomId)) {
+            // Admin or a member of any room that's using this shared torrent.
+            const callerRoom = req.session?.roomId;
+            const isTorrentMember = !!(callerRoom && torrentInfo.rooms.has(callerRoom));
+            if (!req.session?.isAdmin && !isTorrentMember) {
                 return res.status(403).json({ error: 'Join the room first' });
             }
 
@@ -1551,7 +1620,8 @@ app.get('/api/codecs', async (req, res) => {
                 return res.json({ ready: true, ...codecCache.get(cacheKey) });
             }
 
-            const videosDir = path.join(roomsDir, torrentInfo.roomId, 'videos');
+            // Files live where the torrent was first downloaded (ownerRoomId).
+            const videosDir = path.join(roomsDir, torrentInfo.ownerRoomId, 'videos');
             const filePath = path.join(videosDir, file.path);
 
             if (!fs.existsSync(filePath)) {
@@ -1625,27 +1695,32 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
             const { infoHash, fileIndex } = req.query;
             const torrentInfo = activeTorrents.get(infoHash);
             if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
-            if (!checkRoomMember(torrentInfo.roomId)) {
+            const callerRoom = req.session?.roomId;
+            if (!isAdmin && !(callerRoom && torrentInfo.rooms.has(callerRoom))) {
                 return res.status(403).json({ error: 'Join the room first' });
             }
 
             const file = torrentInfo.torrent.files[parseInt(fileIndex)];
             if (!file) return res.status(404).json({ error: 'File not found' });
 
-            sessionKey = `torrent-${torrentInfo.roomId}-${infoHash}-${fileIndex}-${needs}`;
+            // Key HLS session by the CALLER's room so each room's transcode
+            // lifecycle is independent. File path uses ownerRoomId (download dir).
+            const sessionRoom = callerRoom || torrentInfo.ownerRoomId;
+            sessionKey = `torrent-${sessionRoom}-${infoHash}-${fileIndex}-${needs}`;
 
             if (!hlsSessions.has(sessionKey)) {
                 file.select();
                 if (torrentInfo.torrent.paused) torrentInfo.torrent.resume();
 
                 const input = file.done
-                    ? path.join(roomsDir, torrentInfo.roomId, 'videos', file.path)
+                    ? path.join(roomsDir, torrentInfo.ownerRoomId, 'videos', file.path)
                     : file.createReadStream();
                 startHlsSession(sessionKey, input, needs);
 
-                // Extract embedded subtitles (same as raw stream endpoint)
+                // Extract embedded subtitles (same as raw stream endpoint) and
+                // emit them to the caller's room.
                 if (extractEmbeddedSubtitles) {
-                    extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), torrentInfo.roomId).catch(e =>
+                    extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), sessionRoom).catch(e =>
                         console.error('Subtitle extraction failed:', e.message)
                     );
                 }
@@ -1744,10 +1819,14 @@ app.post('/api/hls/keepalive', (req, res) => {
     let sessionKey;
     if (source === 'torrent') {
         const { infoHash, fileIndex } = req.query;
-        // roomId is inferred server-side from the torrent registry
         const torrentInfo = activeTorrents?.get(infoHash);
         if (!torrentInfo) return res.status(404).end();
-        sessionKey = `torrent-${torrentInfo.roomId}-${infoHash}-${fileIndex}-${needs}`;
+        // Keepalive must match the same sessionKey the master.m3u8 endpoint created:
+        // scoped to the caller's room, with ownerRoomId as fallback.
+        const sessionRoom = req.session?.roomId && torrentInfo.rooms.has(req.session.roomId)
+            ? req.session.roomId
+            : torrentInfo.ownerRoomId;
+        sessionKey = `torrent-${sessionRoom}-${infoHash}-${fileIndex}-${needs}`;
     } else if (source === 'upload') {
         const { roomId, filename } = req.query;
         sessionKey = `upload-${roomId}-${filename}-${needs}`;
@@ -2560,34 +2639,43 @@ async function cleanupInactiveRooms() {
     });
 
     for (const roomId of roomsToDelete) {
-        const room = rooms.get(roomId);
-
-        if (room.currentTorrent && room.currentTorrent.destroy && typeof room.currentTorrent.destroy === 'function') {
-            let torrentUsedElsewhere = false;
-            rooms.forEach((otherRoom, otherRoomId) => {
-                if (otherRoomId !== roomId && otherRoom.currentTorrent === room.currentTorrent) {
-                    torrentUsedElsewhere = true;
-                }
-            });
-
-            if (!torrentUsedElsewhere) {
-                try {
-                    room.currentTorrent.destroy({ destroyStore: false });
-                    console.log(`Destroyed torrent for room ${roomId}`);
-                } catch (err) {
-                    console.error(`Error destroying torrent for room ${roomId}:`, err);
+        // Detach this room from any shared torrents and determine whether any
+        // torrent still owns files on disk under this roomId.
+        let keepRoomDir = false;
+        if (ENABLE_TORRENTS && activeTorrents) {
+            for (const [hash, info] of [...activeTorrents]) {
+                if (!info.rooms.has(roomId)) continue;
+                info.rooms.delete(roomId);
+                info.selectedFilesByRoom.delete(roomId);
+                if (info.rooms.size === 0) {
+                    try {
+                        info.torrent.destroy({ destroyStore: false });
+                        console.log(`Destroyed torrent ${info.torrent.name} (last room left)`);
+                    } catch (err) {
+                        console.error(`Error destroying torrent ${hash}:`, err);
+                    }
+                    activeTorrents.delete(hash);
+                } else if (info.ownerRoomId === roomId) {
+                    // Other rooms still share this torrent, and its files live
+                    // under THIS roomId's videosDir — keep the dir around
+                    // until the last sharer is gone (will be retried next pass).
+                    keepRoomDir = true;
                 }
             }
         }
 
-        const roomDir = path.join(roomsDir, roomId);
-        if (fs.existsSync(roomDir)) {
-            try {
-                await fs.promises.rm(roomDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
-                console.log(`Deleted room directory: ${roomId}`);
-            } catch (err) {
-                console.error(`Error deleting room directory ${roomId}:`, err.message);
+        if (!keepRoomDir) {
+            const roomDir = path.join(roomsDir, roomId);
+            if (fs.existsSync(roomDir)) {
+                try {
+                    await fs.promises.rm(roomDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+                    console.log(`Deleted room directory: ${roomId}`);
+                } catch (err) {
+                    console.error(`Error deleting room directory ${roomId}:`, err.message);
+                }
             }
+        } else {
+            console.log(`Keeping room directory ${roomId}: still hosts torrent files for other rooms`);
         }
 
         const streamInfo = activeStreams.get(roomId);
@@ -2603,8 +2691,20 @@ async function cleanupInactiveRooms() {
 
         playlistCache.delete(roomId);
 
-        rooms.delete(roomId);
-        console.log(`Cleaned up inactive room: ${roomId}`);
+        if (keepRoomDir) {
+            // Purge users/subtitles state but keep the room entry alive so the
+            // next cleanup pass can finish the job once all sharers are gone.
+            const room = rooms.get(roomId);
+            if (room) {
+                room.users.clear();
+                room.currentMedia = null;
+                room.subtitles = [];
+                room.lastActivity = Date.now() - ROOM_INACTIVITY_TIMEOUT;
+            }
+        } else {
+            rooms.delete(roomId);
+            console.log(`Cleaned up inactive room: ${roomId}`);
+        }
     }
 
     const playlistMaxAge = 6 * 60 * 60 * 1000;
