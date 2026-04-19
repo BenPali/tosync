@@ -6,14 +6,17 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci --only=production
+RUN npm ci
 
 COPY server.js ./
 COPY build.js ./
 COPY generate-hash.js ./
+COPY tailwind.config.js ./
 COPY src ./src
 
 RUN node build.js
+
+RUN npm prune --production
 
 RUN mkdir -p rooms
 
