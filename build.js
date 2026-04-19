@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { execFileSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,6 +11,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 const VERSION = pkg.version;
 
 console.log(`ToSync Build Script v${VERSION}\n`);
+
+const TAILWIND_CLI = path.join(__dirname, 'node_modules', '.bin', 'tailwindcss');
 
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) {
@@ -59,6 +62,17 @@ function copyDir(src, dest, exclude = []) {
     });
 }
 
+function compileTailwind(variant, outPath) {
+    const input = path.join('src', `tailwind.${variant}.css`);
+    execFileSync(TAILWIND_CLI, [
+        '-c', 'tailwind.config.js',
+        '-i', input,
+        '-o', outPath,
+        '--minify',
+    ], { stdio: ['ignore', 'inherit', 'inherit'] });
+    console.log(`  ✓  styles.css (Tailwind, ${variant})`);
+}
+
 function buildPublic() {
     console.log('═══════════════════════════════════════');
     console.log('  Building PUBLIC');
@@ -77,7 +91,8 @@ function buildPublic() {
     ensureDir(path.join(dest, 'js', 'modules'));
 
     copyFile('src/index.public.html', path.join(dest, 'index.html'), 'index.html', replacements);
-    copyFile('src/styles.css', path.join(dest, 'styles.css'));
+    copyFile('src/theme.js', path.join(dest, 'theme.js'));
+    compileTailwind('public', path.join(dest, 'styles.css'));
     copyFile('src/js/config.public.js', path.join(dest, 'js', 'config.js'), 'config.js');
     copyFile('src/js/state.js', path.join(dest, 'js', 'state.js'));
     copyFile('src/js/main.js', path.join(dest, 'js', 'main.js'), 'main.js');
@@ -107,7 +122,9 @@ function buildPrivate() {
 
     copyFile('src/index.private.html', path.join(dest, 'index.html'), 'index.html', replacements);
     copyFile('src/login.html', path.join(dest, 'login.html'), 'login.html', replacements);
-    copyFile('src/styles.css', path.join(dest, 'styles.css'));
+    copyFile('src/login.js', path.join(dest, 'login.js'), 'login.js', replacements);
+    copyFile('src/theme.js', path.join(dest, 'theme.js'));
+    compileTailwind('private', path.join(dest, 'styles.css'));
     copyFile('src/js/config.private.js', path.join(dest, 'js', 'config.js'), 'config.js');
     copyFile('src/js/state.js', path.join(dest, 'js', 'state.js'));
     copyFile('src/js/main.js', path.join(dest, 'js', 'main.js'), 'main.js');
@@ -124,66 +141,91 @@ function verify() {
     console.log('═══════════════════════════════════════\n');
 
     let passed = true;
+    const check = (ok, pass, fail) => {
+        if (ok) console.log(`  ✓ ${pass}`);
+        else { console.log(`  ❌ ${fail}`); passed = false; }
+    };
 
-    // Verify torrentManager.js is EXCLUDED from public build
-    const publicTorrent = path.join('public', 'js', 'modules', 'torrentManager.js');
-    if (fs.existsSync(publicTorrent)) {
-        console.log('  ❌ PUBLIC has torrentManager.js');
-        passed = false;
-    } else {
-        console.log('  ✓ PUBLIC is clean');
-    }
+    // -- Module exclusion / inclusion --
+    check(!fs.existsSync(path.join('public', 'js', 'modules', 'torrentManager.js')),
+        'PUBLIC excludes torrentManager.js', 'PUBLIC has torrentManager.js');
+    check(fs.existsSync(path.join('private', 'js', 'modules', 'torrentManager.js')),
+        'PRIVATE includes torrentManager.js', 'PRIVATE missing torrentManager.js');
+    check(!fs.existsSync(path.join('public', 'js', 'modules', 'iptvManager.js')),
+        'PUBLIC excludes iptvManager.js', 'PUBLIC has iptvManager.js');
+    check(fs.existsSync(path.join('private', 'js', 'modules', 'iptvManager.js')),
+        'PRIVATE includes iptvManager.js', 'PRIVATE missing iptvManager.js');
 
-    const privateTorrent = path.join('private', 'js', 'modules', 'torrentManager.js');
-    if (!fs.existsSync(privateTorrent)) {
-        console.log('  ❌ PRIVATE missing torrentManager.js');
-        passed = false;
-    } else {
-        console.log('  ✓ PRIVATE includes torrentManager.js');
-    }
+    // -- Compiled CSS exists --
+    check(fs.existsSync(path.join('public', 'styles.css')),
+        'PUBLIC styles.css compiled', 'PUBLIC styles.css missing');
+    check(fs.existsSync(path.join('private', 'styles.css')),
+        'PRIVATE styles.css compiled', 'PRIVATE styles.css missing');
 
-    const publicIptv = path.join('public', 'js', 'modules', 'iptvManager.js');
-    if (fs.existsSync(publicIptv)) {
-        console.log('  ❌ PUBLIC has iptvManager.js');
-        passed = false;
-    } else {
-        console.log('  ✓ PUBLIC clean (no iptvManager.js)');
-    }
-
-    // Verify public HTML has no torrent UI
     const publicHtml = fs.readFileSync(path.join('public', 'index.html'), 'utf8');
-    if (publicHtml.includes('torrentInput') || publicHtml.includes('loadTorrentBtn')) {
-        console.log('  ❌ PUBLIC HTML has torrent UI elements');
-        passed = false;
-    } else {
-        console.log('  ✓ PUBLIC HTML clean (no torrent UI)');
+    const privateHtml = fs.readFileSync(path.join('private', 'index.html'), 'utf8');
+    const loginHtml = fs.existsSync(path.join('private', 'login.html'))
+        ? fs.readFileSync(path.join('private', 'login.html'), 'utf8') : '';
+
+    // -- Public HTML must NOT contain torrent/IPTV markers --
+    const FORBIDDEN_IN_PUBLIC = [
+        'torrentInput', 'loadTorrentBtn', 'torrentInfo', 'removeTorrentBtn',
+        'iptvPlaylistInput', 'loadPlaylistBtn', 'iptvBrowser', 'downloadedFilesList',
+        'hls.js', 'mpegts.js', 'magnet:', 'logoutBtn',
+    ];
+    for (const marker of FORBIDDEN_IN_PUBLIC) {
+        check(!publicHtml.includes(marker),
+            `PUBLIC HTML absent of "${marker}"`,
+            `PUBLIC HTML leaks private-only marker "${marker}"`);
     }
 
-    // Verify public config has ENABLE_TORRENTS: false
+    // -- Private HTML must contain the private-only markers --
+    const REQUIRED_IN_PRIVATE = [
+        'torrentInput', 'loadTorrentBtn', 'iptvPlaylistInput', 'loadPlaylistBtn',
+        'logoutBtn', 'landingPage',
+    ];
+    for (const marker of REQUIRED_IN_PRIVATE) {
+        check(privateHtml.includes(marker),
+            `PRIVATE HTML has "${marker}"`,
+            `PRIVATE HTML missing "${marker}"`);
+    }
+
+    // -- No Tailwind CDN reference in any build --
+    for (const [label, html] of [['PUBLIC', publicHtml], ['PRIVATE', privateHtml], ['LOGIN', loginHtml]]) {
+        if (!html) continue;
+        check(!html.includes('cdn.tailwindcss.com'),
+            `${label} HTML has no Tailwind CDN`,
+            `${label} HTML still references cdn.tailwindcss.com`);
+    }
+
+    // -- Every CDN <script src="https://..."> tag has integrity="..." --
+    const cdnScriptRe = /<script\s+[^>]*src=["']https:\/\/[^"']+["'][^>]*>/gi;
+    for (const [label, html] of [['PUBLIC', publicHtml], ['PRIVATE', privateHtml], ['LOGIN', loginHtml]]) {
+        if (!html) continue;
+        const tags = html.match(cdnScriptRe) || [];
+        for (const tag of tags) {
+            check(tag.includes('integrity='),
+                `${label} CDN script has SRI: ${tag.slice(0, 80)}…`,
+                `${label} CDN script missing SRI: ${tag}`);
+        }
+    }
+
+    // -- Config sanity --
     const publicConfig = fs.readFileSync(path.join('public', 'js', 'config.js'), 'utf8');
-    if (!publicConfig.includes('ENABLE_TORRENTS: false')) {
-        console.log('  ❌ PUBLIC config.js missing ENABLE_TORRENTS: false');
-        passed = false;
-    } else {
-        console.log('  ✓ PUBLIC config.js has ENABLE_TORRENTS: false');
-    }
-
-    // Verify private config has ENABLE_TORRENTS: true
+    check(publicConfig.includes('ENABLE_TORRENTS: false'),
+        'PUBLIC config has ENABLE_TORRENTS: false',
+        'PUBLIC config missing ENABLE_TORRENTS: false');
     const privateConfig = fs.readFileSync(path.join('private', 'js', 'config.js'), 'utf8');
-    if (!privateConfig.includes('ENABLE_TORRENTS: true')) {
-        console.log('  ❌ PRIVATE config.js missing ENABLE_TORRENTS: true');
-        passed = false;
-    } else {
-        console.log('  ✓ PRIVATE config.js has ENABLE_TORRENTS: true');
-    }
+    check(privateConfig.includes('ENABLE_TORRENTS: true'),
+        'PRIVATE config has ENABLE_TORRENTS: true',
+        'PRIVATE config missing ENABLE_TORRENTS: true');
 
-    // Verify private has login.html
-    if (!fs.existsSync(path.join('private', 'login.html'))) {
-        console.log('  ❌ PRIVATE missing login.html');
-        passed = false;
-    } else {
-        console.log('  ✓ PRIVATE has login.html');
-    }
+    // -- Private has login.html --
+    check(fs.existsSync(path.join('private', 'login.html')),
+        'PRIVATE has login.html', 'PRIVATE missing login.html');
+    // Login page must not ship to public
+    check(!fs.existsSync(path.join('public', 'login.html')),
+        'PUBLIC has no login.html', 'PUBLIC ships login.html (should be private-only)');
 
     console.log('');
     return passed;
