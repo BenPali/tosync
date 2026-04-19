@@ -1016,13 +1016,13 @@ if (ENABLE_TORRENTS) {
         return false;
     };
 
-    // SSRF-safe fetch dispatcher: forces TCP connect to the already-validated IP
+    // SSRF-safe fetch dispatcher: forces TCP connect to the already-validated IPs
     // while keeping the URL hostname intact so TLS SNI + Host header stay correct.
     const ipLockedDispatcher = (lookupResults) => new UndiciAgent({
         connect: {
-            lookup: (_hostname, _options, cb) => {
-                const addr = lookupResults[0];
-                cb(null, addr.address, addr.family);
+            lookup: (_hostname, options, cb) => {
+                if (options.all) cb(null, lookupResults);
+                else cb(null, lookupResults[0].address, lookupResults[0].family);
             },
         },
     });
