@@ -411,12 +411,14 @@ export class MediaManager {
             state.videoPlayer.load();
         }
 
-        state.videoPlayer.currentTime = videoState.currentTime || 0;
         state.videoPlayer.playbackRate = videoState.playbackRate || 1;
 
         state.videoPlayer.onloadedmetadata = () => {
             const suffix = needs ? ' (transcoded)' : '';
             uiManager.updateMediaStatus(`Watching: ${fileData.fileName}${suffix}`);
+
+            // Seek AFTER metadata is loaded so the browser honors it (seekable range is known).
+            state.videoPlayer.currentTime = videoState.currentTime || 0;
 
             if (videoState.isPlaying) {
                 state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
