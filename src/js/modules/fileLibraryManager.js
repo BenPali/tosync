@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { socketManager, torrentManager, uiManager } from '../main.js';
 import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls } from './codecUtils.js';
+import { resetMediaLoad } from './mediaManager.js';
 
 export class FileLibraryManager {
     async loadFileLibrary() {
@@ -140,6 +141,7 @@ export class FileLibraryManager {
             return;
         }
 
+        resetMediaLoad();
         destroyHls();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;

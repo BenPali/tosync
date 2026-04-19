@@ -134,7 +134,13 @@ export class SocketManager {
             if (state.videoPlayer.readyState >= 1) {
                 apply();
             } else {
-                state.videoPlayer.addEventListener('loadedmetadata', apply, { once: true });
+                // Tie the listener to the current media load so a subsequent
+                // media change cancels it (prevents applying a stale seek to a
+                // freshly-loaded video).
+                state.videoPlayer.addEventListener('loadedmetadata', apply, {
+                    once: true,
+                    signal: state.mediaLoadAbort?.signal
+                });
             }
         });
 

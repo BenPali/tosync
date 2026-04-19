@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, uiManager } from '../main.js';
 import { destroyHls } from './codecUtils.js';
+import { resetMediaLoad } from './mediaManager.js';
 
 export class IptvManager {
 
@@ -294,6 +295,7 @@ export class IptvManager {
 
         uiManager.updateMediaStatus(`Tuning to ${channelName}...`);
 
+        resetMediaLoad();
         destroyHls();
         if (state.mpegtsPlayer) {
             state.mpegtsPlayer.destroy();

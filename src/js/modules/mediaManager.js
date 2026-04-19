@@ -5,6 +5,14 @@ import { config } from '../config.js';
 import { socketManager, torrentManager, subtitleManager, uiManager } from '../main.js';
 import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls } from './codecUtils.js';
 
+// Call at every point where a new media source is being loaded. Aborts any
+// listeners (e.g. deferred force-sync) tied to the previous media so stale
+// events can't fire against a newly-loaded video.
+export function resetMediaLoad() {
+    state.mediaLoadAbort?.abort();
+    state.mediaLoadAbort = new AbortController();
+}
+
 export class MediaManager {
     // Upload file
     async uploadFile() {
@@ -262,6 +270,7 @@ export class MediaManager {
     // Handle media updates from server
     handleMediaUpdate(data) {
         subtitleManager.clearSubtitles();
+        resetMediaLoad();
 
         switch (data.action) {
             case 'load-torrent': {
@@ -391,6 +400,7 @@ export class MediaManager {
     // Restore file media for late-joining users
     restoreFileMedia(mediaData, videoState) {
         state.isLiveStream = false;
+        resetMediaLoad();
         destroyHls();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
@@ -432,6 +442,7 @@ export class MediaManager {
         const streamName = mediaData.data.streamName || 'Live Stream';
         const relayPath = mediaData.data.relayUrl || `/api/stream/relay/${state.currentRoomId}`;
 
+        resetMediaLoad();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
 

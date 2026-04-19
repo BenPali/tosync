@@ -20,6 +20,10 @@ export const state = {
 
     // Media
     currentTorrentInfo: null,
+    // Aborts any pending listeners tied to the current media (e.g. deferred
+    // force-sync). Replaced on every media change so stale events can't fire
+    // against a newly-loaded video.
+    mediaLoadAbort: null,
     torrentProgressInterval: null,
     lastMediaAction: null,
     hlsInstance: null,

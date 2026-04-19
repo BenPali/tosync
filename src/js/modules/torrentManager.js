@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, subtitleManager, uiManager } from '../main.js';
 import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls } from './codecUtils.js';
+import { resetMediaLoad } from './mediaManager.js';
 
 function buildEpisodeLabel(file) {
     if (file.episode == null) return file.name.replace(/\.[^.]+$/, '');
@@ -91,6 +92,7 @@ export class TorrentManager {
         this._playingFileIndex = fileIndex;
         this._selectFile(fileIndex);
 
+        resetMediaLoad();
         destroyHls();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
@@ -474,6 +476,7 @@ export class TorrentManager {
 
         if (info.infoHash === undefined || info.fileIndex === undefined) return;
 
+        resetMediaLoad();
         destroyHls();
         state.videoPlayer.onloadedmetadata = null;
         state.videoPlayer.onerror = null;
