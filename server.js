@@ -165,6 +165,14 @@ function requireAdmin(req, res, next) {
         return next();
     }
     if (req.path.startsWith('/api/')) {
+        // Differentiate the "I'm room admin" case from "I'm anonymous" —
+        // torrents/IPTV require an authenticated admin account regardless.
+        if (req.session && req.session.isRoomAdmin) {
+            return res.status(403).json({
+                error: 'Loading torrents or IPTV requires a logged-in admin account. Room admins can control playback but cannot start new fetches.',
+                code: 'ADMIN_LOGIN_REQUIRED'
+            });
+        }
         return res.status(401).json({ error: 'Authentication required' });
     }
     const redirect = encodeURIComponent(req.originalUrl);

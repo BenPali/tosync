@@ -162,7 +162,9 @@ export class TorrentManager {
         if (!fileList) return;
         fileList.innerHTML = '';
 
-        if (files.length === 0) {
+        // Guard against callers (e.g. admin-transfer with no active torrent)
+        // that hand us undefined/null instead of an empty array.
+        if (!Array.isArray(files) || files.length === 0) {
             const empty = document.createElement('p');
             empty.className = 'text-xs text-neutral-600 italic p-4';
             empty.textContent = 'No video files found.';

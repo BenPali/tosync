@@ -64,11 +64,19 @@ export class AuthManager {
             state.userRole = 'admin';
             this.updateUIForRole('admin', state.userName);
 
-            // Restore torrent UI if a torrent is active
+            // Restore torrent UI if a torrent is active. The broadcast payload
+            // only carries a single-file pointer, so re-fetch the full file
+            // list from the server before rendering the picker.
             if (state.currentTorrentInfo && torrentManager) {
                 const info = document.getElementById('torrentInfo');
                 if (info) info.classList.remove('hidden');
-                torrentManager.displayTorrentFiles(state.currentTorrentInfo.files);
+                const hash = state.currentTorrentInfo.infoHash;
+                fetch(`/api/torrents/${hash}/status`, { credentials: 'include' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (data?.files) torrentManager.displayTorrentFiles(data.files);
+                    })
+                    .catch(() => {});
                 torrentManager.updateTorrentProgressFromServer();
             }
 
