@@ -13,3 +13,9 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Scratch / session artifacts
+TODO
+mockup-*.html
+*.png
+.playwright-mcp/
