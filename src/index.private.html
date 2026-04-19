@@ -20,12 +20,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
-        /* Subtitle popover: desktop dropdown anchored to CC button,
-           mobile fullscreen-bottom sheet so it never gets clipped. */
+        /* Subtitle popover: desktop dropdown growing rightward from CC button
+           (CC sits left-of-center in the transport bar, so right-anchoring
+           always clipped the left edge). Mobile = fixed bottom sheet. */
         .cc-popover {
             position: absolute;
             top: 100%;
-            right: 0;
+            left: 0;
+            right: auto;
             margin-top: 0.5rem;
             width: 20rem;
             max-width: calc(100vw - 1rem);
