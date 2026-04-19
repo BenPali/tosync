@@ -108,13 +108,20 @@ app.use(express.json({ limit: '200kb' }));
 app.use('/api/', apiLimiter);
 app.set('trust proxy', 1);
 
+// Script sources are tighter on the public build: no jsdelivr (hls.js/mpegts.js
+// are private-only). Neither variant needs 'unsafe-eval' or 'unsafe-inline'
+// since Tailwind is compiled at build-time and all inline <script> blocks
+// have been externalized.
+const SCRIPT_SRC = ENABLE_TORRENTS
+    ? "'self' https://cdn.socket.io https://cdn.jsdelivr.net"
+    : "'self' https://cdn.socket.io";
 const CSP_POLICY = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.socket.io https://cdn.jsdelivr.net https://cdn.tailwindcss.com",
+    `script-src ${SCRIPT_SRC}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
-    "connect-src 'self' ws: wss: https://cdn.jsdelivr.net https://cdn.socket.io",
+    "connect-src 'self' ws: wss:",
     "media-src 'self' blob:",
     "frame-src 'self'",
     "worker-src 'self' blob:"
@@ -151,8 +158,6 @@ app.use(sessionMiddleware);
 // Static file serving - disable auto index.html for private to allow auth redirect
 const staticOptions = ENABLE_TORRENTS ? { index: false } : {};
 app.use(express.static(path.join(__dirname, STATIC_DIR), staticOptions));
-
-const socketRoomMembership = new Map();
 
 function requireAdmin(req, res, next) {
     if (req.session && req.session.isAdmin) {
@@ -405,22 +410,16 @@ function stopHlsSession(sessionKey) {
 
 function stopAllHlsSessionsForRoom(roomId) {
     const keysToStop = [];
-
-    // Torrent session keys use infoHash, not roomId — look up which hashes belong to this room
-    if (activeTorrents) {
-        for (const [infoHash, info] of activeTorrents) {
-            if (info.roomId === roomId) {
-                for (const key of hlsSessions.keys()) {
-                    if (key.startsWith(`torrent-${infoHash}-`)) keysToStop.push(key);
-                }
-            }
+    // Both torrent and upload session keys are roomId-scoped:
+    //   torrent-${roomId}-${infoHash}-${fileIndex}-${needs}
+    //   upload-${roomId}-${filename}-${needs}
+    const torrentPrefix = `torrent-${roomId}-`;
+    const uploadPrefix = `upload-${roomId}-`;
+    for (const key of hlsSessions.keys()) {
+        if (key.startsWith(torrentPrefix) || key.startsWith(uploadPrefix)) {
+            keysToStop.push(key);
         }
     }
-
-    for (const key of hlsSessions.keys()) {
-        if (key.startsWith(`upload-${roomId}-`)) keysToStop.push(key);
-    }
-
     keysToStop.forEach(k => stopHlsSession(k));
 }
 
@@ -429,17 +428,19 @@ const storage = multer.diskStorage({
         const roomId = req.query.roomId;
         if (!roomId) return cb(new Error('Room ID required'));
 
-        const isSubtitle = file.mimetype === 'application/x-subrip';
-        const folder = isSubtitle ? 'subtitles' : 'videos';
-        const uploadPath = path.join(roomsDir, roomId, folder);
-
-        fs.mkdirSync(uploadPath, { recursive: true });
-        cb(null, uploadPath);
+        try {
+            const { videosDir, subtitlesDir } = ensureRoomDirectories(roomId);
+            const isSubtitle = file.mimetype === 'application/x-subrip';
+            cb(null, isSubtitle ? subtitlesDir : videosDir);
+        } catch (err) {
+            cb(err);
+        }
     },
     filename: (req, file, cb) => {
         const isSubtitle = file.mimetype === 'application/x-subrip';
         const uniquePrefix = Date.now() + '-';
-        cb(null, isSubtitle ? uniquePrefix + 'subtitle.srt' : uniquePrefix + file.originalname);
+        const safeName = path.basename(file.originalname);
+        cb(null, isSubtitle ? uniquePrefix + 'subtitle.srt' : uniquePrefix + safeName);
     }
 });
 
@@ -459,12 +460,17 @@ const subtitleStorage = multer.diskStorage({
     destination: (req, file, cb) => {
         const roomId = req.body.roomId || req.query.roomId;
         if (!roomId) return cb(new Error('Room ID required'));
-        const { subtitlesDir } = ensureRoomDirectories(roomId);
-        cb(null, subtitlesDir);
+        try {
+            const { subtitlesDir } = ensureRoomDirectories(roomId);
+            cb(null, subtitlesDir);
+        } catch (err) {
+            cb(err);
+        }
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
+        const safeName = path.basename(file.originalname);
+        cb(null, uniqueSuffix + '-' + safeName);
     }
 });
 
@@ -670,9 +676,11 @@ if (ENABLE_TORRENTS) {
         if (!torrentInfo) return res.status(404).json({ error: 'Torrent not found' });
 
         clearExtractionWatchers(req.params.infoHash);
-        // Clean up any HLS transcode sessions for this torrent
+        // Clean up any HLS transcode sessions for this torrent (new key format is
+        // torrent-${roomId}-${infoHash}-${fileIndex}-${needs} — match on infoHash segment)
+        const infoHashSegment = `-${req.params.infoHash}-`;
         [...hlsSessions.keys()]
-            .filter(k => k.startsWith(`torrent-${req.params.infoHash}-`))
+            .filter(k => k.startsWith('torrent-') && k.includes(infoHashSegment))
             .forEach(k => stopHlsSession(k));
         activeTorrents.delete(req.params.infoHash);
         await new Promise(resolve => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
@@ -862,22 +870,8 @@ if (ENABLE_TORRENTS) {
         }
 
         const roomId = torrentInfo.roomId;
-        const isAdmin = req.session && req.session.isAdmin;
-
-        const viewerSocketId = req.query.socketId || req.headers['x-socket-id'];
-        let isRoomMember = false;
-
-        if (viewerSocketId) {
-            const memberRoomId = socketRoomMembership.get(viewerSocketId);
-            const io = req.app.get('io');
-            const socket = io?.sockets?.sockets?.get(viewerSocketId);
-            isRoomMember = memberRoomId === roomId && socket?.connected;
-        }
-
-        // Fallback: session-based auth (survives socket reconnections)
-        if (!isRoomMember && req.session && req.session.roomId === roomId) {
-            isRoomMember = true;
-        }
+        const isAdmin = !!(req.session && req.session.isAdmin);
+        const isRoomMember = !!(req.session && req.session.roomId === roomId);
 
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
@@ -1004,6 +998,9 @@ if (ENABLE_TORRENTS) {
         if (/^10\./.test(ip)) return true;
         if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip)) return true;
         if (/^192\.168\./.test(ip)) return true;
+        if (/^169\.254\./.test(ip)) return true;                          // IPv4 link-local (cloud metadata)
+        if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true; // CGNAT 100.64.0.0/10
+        if (/^(22[4-9]|23\d|24\d|25\d)\./.test(ip)) return true;          // multicast + reserved (224.0.0.0/4, 240.0.0.0/4)
         if (ip === '0.0.0.0' || ip === '255.255.255.255') return true;
 
         if (ip === '::1' || ip === '::') return true;
@@ -1013,6 +1010,7 @@ if (ENABLE_TORRENTS) {
         if (/^::ffff:10\./i.test(ip)) return true;
         if (/^::ffff:172\.(1[6-9]|2[0-9]|3[01])\./i.test(ip)) return true;
         if (/^::ffff:192\.168\./i.test(ip)) return true;
+        if (/^::ffff:169\.254\./i.test(ip)) return true;
 
         return false;
     };
@@ -1083,12 +1081,16 @@ if (ENABLE_TORRENTS) {
 
             const response = await fetch(targetUrl.toString(), {
                 signal: controller.signal,
+                redirect: 'manual',
                 headers: {
                     'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
                     'Host': urlObj.hostname
                 }
             });
 
+            if (response.status >= 300 && response.status < 400) {
+                return res.status(502).json({ error: 'Upstream redirects not allowed' });
+            }
             if (!response.ok) {
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
             }
@@ -1145,13 +1147,16 @@ if (ENABLE_TORRENTS) {
 
                         const reconnectResponse = await fetch(targetUrl.toString(), {
                             signal: newController.signal,
+                            redirect: 'manual',
                             headers: {
                                 'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
                                 'Host': urlObj.hostname
                             }
                         });
 
-                        if (reconnectResponse.ok) {
+                        if (reconnectResponse.status >= 300 && reconnectResponse.status < 400) {
+                            console.error(`Stream reconnect refused: upstream redirected for room ${roomId}`);
+                        } else if (reconnectResponse.ok) {
                             console.log(`Stream reconnected for room ${roomId}`);
                             return pumpSource(reconnectResponse);
                         }
@@ -1191,21 +1196,8 @@ if (ENABLE_TORRENTS) {
 
     app.get('/api/stream/relay/:roomId', (req, res) => {
         const { roomId } = req.params;
-        const viewerSocketId = req.query.socketId || req.headers['x-socket-id'];
-
-        const isAdmin = req.session && req.session.isAdmin;
-        let isRoomMember = false;
-
-        if (viewerSocketId) {
-            const memberRoomId = socketRoomMembership.get(viewerSocketId);
-            const io = req.app.get('io');
-            const socket = io?.sockets?.sockets?.get(viewerSocketId);
-            isRoomMember = memberRoomId === roomId && socket?.connected;
-        }
-
-        if (!isRoomMember && req.session && req.session.roomId === roomId) {
-            isRoomMember = true;
-        }
+        const isAdmin = !!(req.session && req.session.isAdmin);
+        const isRoomMember = !!(req.session && req.session.roomId === roomId);
 
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
@@ -1288,6 +1280,7 @@ if (ENABLE_TORRENTS) {
 
             const response = await fetch(targetUrl.toString(), {
                 signal: controller.signal,
+                redirect: 'manual',
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                     'Host': urlObj.hostname
@@ -1296,6 +1289,9 @@ if (ENABLE_TORRENTS) {
 
             clearTimeout(timeout);
 
+            if (response.status >= 300 && response.status < 400) {
+                return res.status(502).json({ error: 'Upstream redirects not allowed' });
+            }
             if (!response.ok) {
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
             }
@@ -1410,20 +1406,8 @@ if (ENABLE_TORRENTS) {
             return res.status(400).json({ error: 'Missing stream URL' });
         }
 
-        const isAdmin = req.session && req.session.isAdmin;
-        const viewerSocketId = req.query.socketId || req.headers['x-socket-id'];
-        let isRoomMember = false;
-
-        if (viewerSocketId && roomId) {
-            const memberRoomId = socketRoomMembership.get(viewerSocketId);
-            const io = req.app.get('io');
-            const socket = io?.sockets?.sockets?.get(viewerSocketId);
-            isRoomMember = memberRoomId === roomId && socket?.connected;
-        }
-
-        if (!isRoomMember && roomId && req.session && req.session.roomId === roomId) {
-            isRoomMember = true;
-        }
+        const isAdmin = !!(req.session && req.session.isAdmin);
+        const isRoomMember = !!(roomId && req.session && req.session.roomId === roomId);
 
         if (!isAdmin && !isRoomMember) {
             return res.status(403).json({ error: 'Join the room first' });
@@ -1465,6 +1449,7 @@ if (ENABLE_TORRENTS) {
 
             const response = await fetch(targetUrl.toString(), {
                 signal: controller.signal,
+                redirect: 'manual',
                 headers: {
                     'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToSync/${VERSION}`,
                     'Host': urlObj.hostname
@@ -1473,6 +1458,9 @@ if (ENABLE_TORRENTS) {
 
             clearTimeout(timeout);
 
+            if (response.status >= 300 && response.status < 400) {
+                return res.status(502).json({ error: 'Upstream redirects not allowed' });
+            }
             if (!response.ok) {
                 console.warn(`Upstream returned ${response.status} for ${urlObj.hostname}`);
                 return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
@@ -1556,19 +1544,12 @@ if (ENABLE_TORRENTS) {
 
 // Codec detection endpoint — works for both torrents and uploads
 app.get('/api/codecs', async (req, res) => {
-    const { source, socketId } = req.query;
-    const isAdmin = req.session && req.session.isAdmin;
+    const { source } = req.query;
+    const isAdmin = !!(req.session && req.session.isAdmin);
 
-    // Auth: admin session OR room member via socketId OR session roomId
     const checkRoomMember = (roomId) => {
         if (isAdmin) return true;
-        if (socketId) {
-            const memberRoomId = socketRoomMembership.get(socketId);
-            const io = req.app.get('io');
-            const socket = io?.sockets?.sockets?.get(socketId);
-            if (memberRoomId === roomId && socket?.connected) return true;
-        }
-        return req.session && req.session.roomId === roomId;
+        return !!(req.session && req.session.roomId === roomId);
     };
 
     try {
@@ -1648,8 +1629,8 @@ app.get('/api/codecs', async (req, res) => {
 
 // HLS transcoding endpoints
 app.get('/api/hls/master.m3u8', async (req, res) => {
-    const { source, socketId, needs } = req.query;
-    const isAdmin = req.session && req.session.isAdmin;
+    const { source, needs } = req.query;
+    const isAdmin = !!(req.session && req.session.isAdmin);
 
     if (!['audio', 'video', 'both'].includes(needs)) {
         return res.status(400).json({ error: 'Invalid needs parameter' });
@@ -1657,13 +1638,7 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
 
     const checkRoomMember = (roomId) => {
         if (isAdmin) return true;
-        if (socketId) {
-            const memberRoomId = socketRoomMembership.get(socketId);
-            const io = req.app.get('io');
-            const socket = io?.sockets?.sockets?.get(socketId);
-            if (memberRoomId === roomId && socket?.connected) return true;
-        }
-        return req.session && req.session.roomId === roomId;
+        return !!(req.session && req.session.roomId === roomId);
     };
 
     try {
@@ -1683,7 +1658,7 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
             const file = torrentInfo.torrent.files[parseInt(fileIndex)];
             if (!file) return res.status(404).json({ error: 'File not found' });
 
-            sessionKey = `torrent-${infoHash}-${fileIndex}-${needs}`;
+            sessionKey = `torrent-${torrentInfo.roomId}-${infoHash}-${fileIndex}-${needs}`;
 
             if (!hlsSessions.has(sessionKey)) {
                 file.select();
@@ -1795,7 +1770,10 @@ app.post('/api/hls/keepalive', (req, res) => {
     let sessionKey;
     if (source === 'torrent') {
         const { infoHash, fileIndex } = req.query;
-        sessionKey = `torrent-${infoHash}-${fileIndex}-${needs}`;
+        // roomId is inferred server-side from the torrent registry
+        const torrentInfo = activeTorrents?.get(infoHash);
+        if (!torrentInfo) return res.status(404).end();
+        sessionKey = `torrent-${torrentInfo.roomId}-${infoHash}-${fileIndex}-${needs}`;
     } else if (source === 'upload') {
         const { roomId, filename } = req.query;
         sessionKey = `upload-${roomId}-${filename}-${needs}`;
@@ -1807,10 +1785,18 @@ app.post('/api/hls/keepalive', (req, res) => {
     res.status(204).end();
 });
 
-// Conditional auth: private instance requires login, public instance allows (room admin is client-side)
-const optionalAdmin = ENABLE_TORRENTS ? requireAdmin : (req, res, next) => next();
+// Admin gate for actions that must be admin-only on BOTH instances (upload,
+// subtitle upload). Private: requires the authenticated admin login.
+// Public: requires `session.isRoomAdmin`, set at socket join-room / admin-transfer /
+// auto-promotion. This closes the window where a guest could POST directly to
+// /upload or /upload-subtitle on the public instance.
+function requireRoomAdmin(req, res, next) {
+    if (req.session && (req.session.isAdmin || req.session.isRoomAdmin)) return next();
+    if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Admin required' });
+    return res.status(403).json({ error: 'Admin required' });
+}
 
-app.post('/upload', optionalAdmin, (req, res) => {
+app.post('/upload', requireRoomAdmin, (req, res) => {
     req.setTimeout(60 * 60 * 1000);
     res.setTimeout(60 * 60 * 1000);
 
@@ -1860,7 +1846,7 @@ app.post('/upload', optionalAdmin, (req, res) => {
     });
 });
 
-app.post('/upload-subtitle', optionalAdmin, (req, res) => {
+app.post('/upload-subtitle', requireRoomAdmin, (req, res) => {
     subtitleUpload.single('subtitle')(req, res, (err) => {
         if (err) {
             console.error('Subtitle upload error:', err);
@@ -1887,31 +1873,39 @@ app.post('/upload-subtitle', optionalAdmin, (req, res) => {
     });
 });
 
-app.use('/rooms/:roomId/videos', (req, res, next) => {
-    const roomId = req.params.roomId;
-    const videosDir = path.join(roomsDir, roomId, 'videos');
-    if (fs.existsSync(videosDir)) {
-        express.static(videosDir)(req, res, next);
-    } else {
-        res.status(404).json({ error: 'Room not found' });
+function requireRoomAccess(req, res, next) {
+    const { roomId } = req.params;
+    if (!roomId || !ROOM_CODE_PATTERN.test(roomId) || path.basename(roomId) !== roomId) {
+        return res.status(400).json({ error: 'Invalid room ID' });
     }
+    const isAdmin = !!(req.session && req.session.isAdmin);
+    const isMember = !!(req.session && req.session.roomId === roomId);
+    if (!isAdmin && !isMember) {
+        return res.status(403).json({ error: 'Join the room first' });
+    }
+    next();
+}
+
+app.use('/rooms/:roomId/videos', requireRoomAccess, (req, res, next) => {
+    const roomId = req.params.roomId;
+    const videosDir = path.resolve(roomsDir, roomId, 'videos');
+    if (!fs.existsSync(videosDir)) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
+    express.static(videosDir)(req, res, next);
 });
 
-app.use('/rooms/:roomId/subtitles/:filename', async (req, res, next) => {
+app.use('/rooms/:roomId/subtitles/:filename', requireRoomAccess, async (req, res) => {
     try {
-        res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type');
-
         if (req.method === 'OPTIONS') {
             return res.status(200).end();
         }
 
         const { roomId, filename } = req.params;
-        const subtitlesDir = path.join(roomsDir, roomId, 'subtitles');
+        const subtitlesDir = path.resolve(roomsDir, roomId, 'subtitles');
         const filePath = path.resolve(subtitlesDir, filename);
 
-        if (!filePath.startsWith(subtitlesDir)) {
+        if (!filePath.startsWith(subtitlesDir + path.sep)) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -2021,6 +2015,15 @@ function promoteNextAdmin(room, currentAdminSocketId) {
         room.adminId = newAdmin.id;
         users.set(newAdmin.id, newAdmin);
 
+        // Flip session.isRoomAdmin for the new admin so HTTP admin-gated
+        // endpoints pick up the change on the next request.
+        const newAdminSocket = io.sockets.sockets.get(newAdmin.id);
+        const newAdminSession = newAdminSocket?.request?.session;
+        if (newAdminSession) {
+            newAdminSession.isRoomAdmin = true;
+            newAdminSession.save(() => {});
+        }
+
         console.log(`${newAdmin.name} promoted to admin in room ${room.id}`);
 
         io.to(newAdmin.id).emit('admin-transferred', {
@@ -2071,7 +2074,7 @@ function generateUniqueName(baseName, existingUsers, excludeSocketId) {
 io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
 
-    socket.on('join-room', (userData) => {
+    socket.on('join-room', async (userData) => {
         const { roomId, userName, isCreator } = userData;
         const session = socket.request.session;
 
@@ -2103,8 +2106,6 @@ io.on('connection', (socket) => {
             }
         }
 
-        socketRoomMembership.set(socket.id, roomId);
-        if (session) { session.roomId = roomId; session.save(); }
         socket.emit('socket-registered', { socketId: socket.id });
 
         if (!rooms.has(roomId)) {
@@ -2173,6 +2174,24 @@ io.on('connection', (socket) => {
 
         if (finalRole === 'admin' && (!room.adminId || sessionAdmin)) {
             if (!room.adminId) room.adminId = socket.id;
+        }
+
+        // Persist session.roomId AFTER the user is actually a room member,
+        // and await the store commit so subsequent HTTP requests see it.
+        if (session) {
+            session.roomId = roomId;
+            // Also track the user's room-level admin status so HTTP endpoints can
+            // gate admin-only actions (e.g. subtitle upload) on the public instance
+            // — where there is no authenticated admin login, only a client-side
+            // "room creator is admin" model.
+            session.isRoomAdmin = (finalRole === 'admin');
+            try {
+                await new Promise((resolve, reject) =>
+                    session.save(err => err ? reject(err) : resolve())
+                );
+            } catch (err) {
+                console.error(`Session save failed for ${socket.id}:`, err.message);
+            }
         }
 
         console.log(`${user.name} (${finalRole}) joined room: ${roomId}`);
@@ -2391,6 +2410,19 @@ io.on('connection', (socket) => {
         users.set(user.id, user);
         users.set(targetUser.id, targetUser);
 
+        // Sync session.isRoomAdmin for both sides — subsequent HTTP requests
+        // rely on this for admin-only endpoint gating on the public instance.
+        const setSessionAdmin = (socketId, value) => {
+            const s = io.sockets.sockets.get(socketId);
+            const sess = s?.request?.session;
+            if (sess) {
+                sess.isRoomAdmin = value;
+                sess.save(() => {});
+            }
+        };
+        setSessionAdmin(user.id, false);
+        setSessionAdmin(targetUser.id, true);
+
         socket.emit('admin-transferred', {
             newAdminName: targetUser.name,
             formerAdminName: user.name,
@@ -2476,11 +2508,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('leave-room', () => {
-        socketRoomMembership.delete(socket.id);
+        // no-op — kept for forward-compat with older clients; cleanup happens on disconnect
     });
 
     socket.on('disconnect', () => {
-        socketRoomMembership.delete(socket.id);
         console.log(`Socket disconnected: ${socket.id}`);
 
         const user = users.get(socket.id);
