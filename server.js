@@ -2363,9 +2363,6 @@ io.on('connection', (socket) => {
         const _completedExtractions = app.get('completedExtractions');
         if (_completedExtractions) _completedExtractions.clear();
 
-        // Clean up HLS sessions for this room when media changes
-        stopAllHlsSessionsForRoom(user.room);
-
         switch (action) {
             case 'load-torrent':
                 room.currentMedia = {
@@ -2392,6 +2389,11 @@ io.on('connection', (socket) => {
                 };
                 break;
             case 'clear-media':
+                // Only kill HLS sessions when the room is explicitly clearing
+                // media — earlier we killed them on every media-action, which
+                // nuked the admin's own HLS session right after it was started
+                // (load-torrent broadcast fires on loadedmetadata).
+                stopAllHlsSessionsForRoom(user.room);
                 room.currentMedia = null;
                 room.videoState = {
                     isPlaying: false,
