@@ -340,6 +340,10 @@ function startHlsSession(sessionKey, input, needs) {
         codecFlags.push(...videoFlags, ...audioFlags);
     }
 
+    // Run ffmpeg with cwd=dir so its default init.mp4 path (which with
+    // -hls_segment_type fmp4 is written relative to cwd, not the playlist
+    // dir) resolves correctly. Without this, ffmpeg tries to write init.mp4
+    // to the container's / and fails with ENOENT.
     const proc = spawn('ffmpeg', [
         ...inputFlags,
         ...codecFlags,
@@ -349,9 +353,9 @@ function startHlsSession(sessionKey, input, needs) {
         '-hls_segment_type', 'fmp4',
         '-hls_list_size', '0',
         '-hls_base_url', `/api/hls/segments/${token}/`,
-        '-hls_segment_filename', path.join(dir, 'seg%05d.m4s'),
-        path.join(dir, 'master.m3u8')
-    ], { stdio: isPiped ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
+        '-hls_segment_filename', 'seg%05d.m4s',
+        'master.m3u8'
+    ], { cwd: dir, stdio: isPiped ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
 
     console.log(`[HLS] Starting session: ${sessionKey} (transcoding: ${needs}, piped: ${isPiped})`);
 
