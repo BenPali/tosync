@@ -845,7 +845,10 @@ if (ENABLE_TORRENTS) {
     }
 
     extractEmbeddedSubtitles = async function(infoHash, fileIndex, roomId) {
-        const dedupKey = `${infoHash}-${fileIndex}`;
+        // Per-room dedup: one torrent can be shared by multiple rooms, and
+        // each room needs subtitle files served at /rooms/<roomId>/subtitles/.
+        // The previous global dedup made later rooms silently skip extraction.
+        const dedupKey = `${infoHash}-${fileIndex}-${roomId}`;
         if (extractingSubtitles.has(dedupKey) || completedExtractions.has(dedupKey)) return;
         extractingSubtitles.add(dedupKey);
 
@@ -856,11 +859,21 @@ if (ENABLE_TORRENTS) {
             const file = torrentInfo.torrent.files[fileIndex];
             if (!file) return;
 
+            // Wait for the full file — subtitle tracks in MKVs are interleaved
+            // with video, so extracting from a sparse file produces empty VTTs
+            // where the subtitle data hasn't downloaded yet.
+            if (!file.done) {
+                watchForFileCompletion(infoHash, fileIndex, roomId);
+                return;
+            }
+
+            const torrentInfoForPath = activeTorrents.get(infoHash);
+            const ownerRoomId = torrentInfoForPath?.ownerRoomId || roomId;
             const { subtitlesDir } = ensureRoomDirectories(roomId);
-            const filePath = path.join(path.dirname(subtitlesDir), 'videos', file.path);
+            const filePath = path.join(roomsDir, ownerRoomId, 'videos', file.path);
 
             if (!fs.existsSync(filePath)) {
-                if (!file.done) watchForFileCompletion(infoHash, fileIndex, roomId);
+                watchForFileCompletion(infoHash, fileIndex, roomId);
                 return;
             }
 
@@ -869,7 +882,7 @@ if (ENABLE_TORRENTS) {
                 streams = await ffprobeSubtitles(filePath);
             } catch (e) {
                 console.error('ffprobe failed (file may be incomplete):', e.message);
-                if (!file.done) watchForFileCompletion(infoHash, fileIndex, roomId);
+                watchForFileCompletion(infoHash, fileIndex, roomId);
                 return;
             }
 
