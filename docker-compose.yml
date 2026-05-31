@@ -46,6 +46,11 @@ services:
       - ENABLE_TORRENTS=true
       - SESSION_SECRET=${SESSION_SECRET}
       - ADMIN_USERS=${ADMIN_USERS}
+      # Storage limits (read from .env via substitution; app defaults are
+      # larger than this host's 73G disk, so pass them explicitly).
+      - MAX_UPLOAD_GB=${MAX_UPLOAD_GB}
+      - MAX_ROOM_STORAGE_GB=${MAX_ROOM_STORAGE_GB}
+      - MAX_TOTAL_STORAGE_GB=${MAX_TOTAL_STORAGE_GB}
     volumes:
       - ./rooms:/app/rooms
     depends_on:
@@ -69,6 +74,9 @@ services:
       - PORT=3000
       - ENABLE_TORRENTS=false
       - SESSION_SECRET=${SESSION_SECRET}
+      - MAX_UPLOAD_GB=${MAX_UPLOAD_GB}
+      - MAX_ROOM_STORAGE_GB=${MAX_ROOM_STORAGE_GB}
+      - MAX_TOTAL_STORAGE_GB=${MAX_TOTAL_STORAGE_GB}
     restart: unless-stopped
     logging:
       driver: "json-file"
