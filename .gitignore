@@ -18,3 +18,8 @@ TODO
 mockup-*.html
 *.png
 .playwright-mcp/
+
+# Test artifacts
+test-results/
+playwright-report/
+.vitest/

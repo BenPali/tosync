@@ -34,6 +34,7 @@ export const state = {
     // Subtitles
     availableSubtitles: [],
     selectedSubtitleId: null,
+    subtitleOffset: 0, // timing offset in seconds (room-synced, + = subtitles later)
 
     // File library
     currentLibrary: null

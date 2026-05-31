@@ -41,7 +41,7 @@ export class AuthManager {
 
         // Elements that should only be visible (and thus interactive) for admins.
         // Server-side also enforces admin on the matching endpoints — this is the UX hint.
-        const adminOnlyIds = ['adminControls', 'adminPlayerControls', 'subtitleUploadForm'];
+        const adminOnlyIds = ['adminControls', 'adminPlayerControls', 'subtitleUploadForm', 'subtitleTimingControl'];
         const isAdmin = role === 'admin';
         for (const id of adminOnlyIds) {
             document.getElementById(id)?.classList.toggle('hidden', !isAdmin);

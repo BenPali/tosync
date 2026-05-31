@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, uiManager } from '../main.js';
+import { clampOffset, shiftCueTimes, formatOffset } from './subtitleOffset.js';
 
 export class SubtitleManager {
     initialize() {
@@ -134,6 +135,9 @@ export class SubtitleManager {
                     if (ourTrack) {
                         ourTrack.mode = 'showing';
                         uiManager.updateLastAction(`Subtitle enabled: ${subtitle.label}`);
+                        // A freshly-loaded track has cues at their original times;
+                        // re-apply the room's current timing offset to it.
+                        this._onTrackLoaded();
                     }
                 }, 500);
             });
@@ -147,6 +151,58 @@ export class SubtitleManager {
             console.error('Failed to create subtitle track:', error);
             uiManager.showError(`Failed to create subtitle track: ${subtitle.label}`);
         }
+    }
+
+    // ── Subtitle timing offset (room-synced, admin-driven) ──
+    // state.subtitleOffset = desired shift in seconds (+ = subtitles later).
+    // this._appliedOffset  = shift currently baked into the active track's cues,
+    //                        so we only ever move cues by the delta.
+
+    // Admin nudges the offset and broadcasts it to the room.
+    adjustSubtitleOffset(delta) {
+        if (state.userRole !== 'admin') return;
+        this.setSubtitleOffset((state.subtitleOffset || 0) + delta, { broadcast: true });
+    }
+
+    // Apply a target offset locally (and optionally broadcast). Used by the admin
+    // buttons (broadcast:true) and by incoming sync / room-state (broadcast:false).
+    setSubtitleOffset(offset, { broadcast = false } = {}) {
+        offset = clampOffset(offset);
+        state.subtitleOffset = offset;
+        this._applyOffsetToActiveTrack();
+        this.updateOffsetReadout();
+        if (broadcast && state.socket && state.isConnected) {
+            state.socket.emit('subtitle-offset', { offset });
+        }
+    }
+
+    // Shift the active track's cues so the baked offset matches state.subtitleOffset.
+    _applyOffsetToActiveTrack() {
+        const target = state.subtitleOffset || 0;
+        const tracks = state.videoPlayer ? Array.from(state.videoPlayer.textTracks) : [];
+        const track = tracks.find(t => t.mode === 'showing') || tracks[0];
+        if (!track || !track.cues) { this._appliedOffset = target; return; }
+        const delta = target - (this._appliedOffset || 0);
+        if (delta !== 0) {
+            for (const cue of Array.from(track.cues)) {
+                const shifted = shiftCueTimes(cue.startTime, cue.endTime, delta);
+                cue.endTime = shifted.endTime;
+                cue.startTime = shifted.startTime;
+            }
+        }
+        this._appliedOffset = target;
+    }
+
+    // A new track loaded with cues at original times → baked offset is 0; re-apply.
+    _onTrackLoaded() {
+        this._appliedOffset = 0;
+        this._applyOffsetToActiveTrack();
+    }
+
+    updateOffsetReadout() {
+        const el = document.getElementById('subtitleOffsetReadout');
+        if (!el) return;
+        el.textContent = formatOffset(state.subtitleOffset || 0);
     }
 
     updateSubtitlesList() {

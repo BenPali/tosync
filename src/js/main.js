@@ -156,6 +156,8 @@ function setupUIEventListeners() {
     addListener('uploadBtn', () => mediaManager.uploadFile());
     addListener('clearMediaBtn', () => mediaManager.clearMedia());
     addListener('uploadSubtitleBtn', () => subtitleManager.uploadSubtitle());
+    addListener('subtitleOffsetUpBtn', () => subtitleManager.adjustSubtitleOffset(0.5));
+    addListener('subtitleOffsetDownBtn', () => subtitleManager.adjustSubtitleOffset(-0.5));
     addListener('refreshLibraryBtn', () => fileLibraryManager.loadFileLibrary());
 
     addListener('togglePlayBtn', () => videoPlayer.togglePlay());

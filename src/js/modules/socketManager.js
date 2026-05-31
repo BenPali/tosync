@@ -74,6 +74,8 @@ export class SocketManager {
                 state.availableSubtitles = data.subtitles;
                 subtitleManager.updateSubtitlesList();
             }
+            // Restore the room's subtitle timing offset (no re-broadcast).
+            subtitleManager.setSubtitleOffset(data.subtitleOffset || 0, { broadcast: false });
 
             if (data.currentMedia) {
                 if (data.currentMedia.type === 'file') {
@@ -170,6 +172,14 @@ export class SocketManager {
 
         state.socket.on('subtitle-selected', (data) => {
             uiManager.updateLastAction(`${data.user} selected subtitle`);
+        });
+
+        // Admin adjusted the subtitle timing offset — apply it locally (no re-broadcast).
+        state.socket.on('subtitle-offset', (data) => {
+            subtitleManager.setSubtitleOffset(data.offset || 0, { broadcast: false });
+            if (typeof data.user === 'string') {
+                uiManager.updateLastAction(`${data.user} adjusted subtitle timing`);
+            }
         });
 
         // Enhanced admin transfer events with better logging

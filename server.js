@@ -2333,6 +2333,7 @@ io.on('connection', (socket) => {
                 adminId: null,
                 currentTorrent: null,
                 subtitles: [],
+                subtitleOffset: 0,
                 createdAt: Date.now(),
                 lastActivity: Date.now()
             });
@@ -2410,7 +2411,8 @@ io.on('connection', (socket) => {
                 name: room.currentTorrent.name,
                 progress: room.currentTorrent.progress
             } : null,
-            subtitles: room.subtitles
+            subtitles: room.subtitles,
+            subtitleOffset: room.subtitleOffset || 0
         });
 
         socket.to(roomId).emit('user-joined', {
@@ -2498,6 +2500,7 @@ io.on('connection', (socket) => {
         const { action, mediaData } = data || {};
 
         room.subtitles = [];
+        room.subtitleOffset = 0;
         const _completedExtractions = app.get('completedExtractions');
         if (_completedExtractions) _completedExtractions.clear();
 
@@ -2613,6 +2616,24 @@ io.on('connection', (socket) => {
             subtitleId: (data || {}).subtitleId,
             user: user.name
         });
+    });
+
+    // Admin adjusts the subtitle timing offset for the whole room.
+    socket.on('subtitle-offset', (data) => {
+        const user = users.get(socket.id);
+        if (!user || user.role !== 'admin') return;
+
+        const room = rooms.get(user.room);
+        if (!room) return;
+
+        let offset = Number(data && data.offset);
+        if (!Number.isFinite(offset)) return;
+        offset = Math.max(-60, Math.min(60, offset));
+
+        room.subtitleOffset = offset;
+        room.lastActivity = Date.now();
+
+        socket.to(user.room).emit('subtitle-offset', { offset, user: user.name });
     });
 
     socket.on('transfer-admin', (data) => {
