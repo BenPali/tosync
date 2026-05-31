@@ -132,11 +132,28 @@ export class VideoPlayer {
     }
 
     toggleFullscreen() {
-        if (document.fullscreenElement) {
-            document.exitFullscreen();
-        } else {
-            const container = state.videoPlayer.parentElement;
-            if (container) container.requestFullscreen();
+        const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fsElement) {
+            (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+            return;
+        }
+        const container = state.videoPlayer?.parentElement;
+        if (!container) return;
+        const requestOn = (el) =>
+            (el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen)?.call(el);
+        try {
+            const result = requestOn(container);
+            // If the container request rejects (e.g. blocked), fall back to native
+            // video fullscreen, which reliably fills the whole screen.
+            if (result && typeof result.catch === 'function') {
+                result.catch((err) => {
+                    console.warn('Container fullscreen failed, using native video fullscreen:', err?.message || err);
+                    requestOn(state.videoPlayer);
+                });
+            }
+        } catch (err) {
+            console.warn('Fullscreen error, using native video fullscreen:', err?.message || err);
+            requestOn(state.videoPlayer);
         }
     }
 
