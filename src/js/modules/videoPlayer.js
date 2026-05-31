@@ -46,47 +46,67 @@ export class VideoPlayer {
         }
     }
 
+    // Seeking before metadata is loaded is silently dropped by the browser,
+    // which would leave this client out of sync. Defer until seekable, and tie
+    // the listener to the current media load so a media change cancels it.
+    seekWhenReady(t) {
+        const v = state.videoPlayer;
+        if (v.readyState >= 1) {
+            v.currentTime = t;
+        } else {
+            v.addEventListener('loadedmetadata', () => { v.currentTime = t; }, {
+                once: true,
+                signal: state.mediaLoadAbort?.signal
+            });
+        }
+    }
+
     // Handle video synchronization from other users
     handleVideoSync(data) {
         if (state.isLiveStream) return;
         if (state.isReceivingSync) return;
+        if (!data) return;
 
         state.isReceivingSync = true;
-        const syncTolerance = config.SYNC_TOLERANCE;
+        // Reset the suppression flag in a finally so a throw mid-switch can't
+        // leave it stuck true, which would silently drop every future sync.
+        try {
+            const syncTolerance = config.SYNC_TOLERANCE;
 
-        switch (data.action) {
-            case 'play':
-                if (state.videoPlayer.paused) {
-                    if (data.time && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
-                        state.videoPlayer.currentTime = data.time;
+            switch (data.action) {
+                case 'play':
+                    if (state.videoPlayer.paused) {
+                        if (data.time && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
+                            this.seekWhenReady(data.time);
+                        }
+                        state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
                     }
-                    state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
-                }
-                break;
-            case 'pause':
-                if (!state.videoPlayer.paused) {
-                    if (data.time && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
-                        state.videoPlayer.currentTime = data.time;
+                    break;
+                case 'pause':
+                    if (!state.videoPlayer.paused) {
+                        if (data.time && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
+                            this.seekWhenReady(data.time);
+                        }
+                        state.videoPlayer.pause();
                     }
-                    state.videoPlayer.pause();
-                }
-                break;
-            case 'seek':
-                state.videoPlayer.currentTime = data.time || 0;
-                break;
-            case 'playback-rate':
-                state.videoPlayer.playbackRate = data.playbackRate || 1;
-                if (data.time !== undefined && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
-                    state.videoPlayer.currentTime = data.time;
-                }
-                break;
+                    break;
+                case 'seek':
+                    this.seekWhenReady(data.time || 0);
+                    break;
+                case 'playback-rate':
+                    state.videoPlayer.playbackRate = data.playbackRate || 1;
+                    if (data.time !== undefined && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
+                        this.seekWhenReady(data.time);
+                    }
+                    break;
+            }
+
+            uiManager.updateLastAction(`${data.user} ${data.action}`);
+        } finally {
+            setTimeout(() => {
+                state.isReceivingSync = false;
+            }, 300);
         }
-
-        uiManager.updateLastAction(`${data.user} ${data.action}`);
-
-        setTimeout(() => {
-            state.isReceivingSync = false;
-        }, 300);
     }
 
     // Video control functions

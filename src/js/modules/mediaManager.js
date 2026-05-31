@@ -435,7 +435,8 @@ export class MediaManager {
             }
         };
 
-        document.getElementById('torrentInfo').classList.add('hidden');
+        const torrentInfo = document.getElementById('torrentInfo');
+        if (torrentInfo) torrentInfo.classList.add('hidden'); // absent on the public build
     }
 
     restoreStreamMedia(mediaData, videoState) {

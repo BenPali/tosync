@@ -30,6 +30,17 @@ const STATIC_DIR = ENABLE_TORRENTS ? 'private' : 'public';
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 const VERSION = pkg.version;
 
+// Safety net: socket.io does not catch throws inside event listeners, so a
+// single malformed payload would otherwise take down the whole process and
+// every room with it. Log and stay alive rather than crash mid-session.
+// (If you add a process manager with auto-restart, prefer log-then-exit.)
+process.on('uncaughtException', (err) => {
+    console.error('uncaughtException (kept alive):', err);
+});
+process.on('unhandledRejection', (err) => {
+    console.error('unhandledRejection (kept alive):', err);
+});
+
 const SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET && NODE_ENV === 'production') {
     console.error('FATAL: SESSION_SECRET required in production');
@@ -794,20 +805,31 @@ if (ENABLE_TORRENTS) {
     }
 
     function ffmpegExtractSubtitle(inputPath, streamIndex, outputPath) {
+        return ffmpegExtractSubtitles(inputPath, [{ streamIndex, outputPath }]);
+    }
+
+    // Extract multiple subtitle tracks in a single ffmpeg invocation so we
+    // read the input file once instead of N times (huge speedup on big MKVs).
+    function ffmpegExtractSubtitles(inputPath, tracks) {
         return new Promise((resolve, reject) => {
+            const outputArgs = [];
+            for (const { streamIndex, outputPath } of tracks) {
+                outputArgs.push('-map', `0:${streamIndex}`, '-c:s', 'webvtt', outputPath);
+            }
             execFile('ffmpeg', [
                 '-y', '-i', inputPath,
-                '-map', `0:${streamIndex}`,
-                '-c:s', 'webvtt',
-                outputPath
-            ], { timeout: 120000 }, (err) => {
+                ...outputArgs
+            ], { timeout: 180000 }, (err) => {
                 if (err) return reject(err);
                 resolve();
             });
         });
     }
 
-    function watchForFileCompletion(infoHash, fileIndex, roomId) {
+    function watchForFileCompletion(infoHash, fileIndex, _roomId) {
+        // Single global watcher per (torrent, file). When the file finishes
+        // downloading, emit to every room currently using this torrent —
+        // the torrent download is shared, so the watch should be shared too.
         const dedupKey = `${infoHash}-${fileIndex}`;
         if (extractionWatchers.has(dedupKey)) return;
 
@@ -827,9 +849,11 @@ if (ENABLE_TORRENTS) {
             if (file.done) {
                 clearInterval(intervalId);
                 extractionWatchers.delete(dedupKey);
-                extractEmbeddedSubtitles(infoHash, fileIndex, roomId).catch(e =>
-                    console.error('Subtitle extraction retry on file complete failed:', e.message)
-                );
+                for (const roomId of info.rooms) {
+                    extractEmbeddedSubtitles(infoHash, fileIndex, roomId).catch(e =>
+                        console.error(`Subtitle extraction for room ${roomId} failed:`, e.message)
+                    );
+                }
             }
         }, 10000);
         extractionWatchers.set(dedupKey, intervalId);
@@ -895,24 +919,39 @@ if (ENABLE_TORRENTS) {
             const rooms = app.get('rooms');
             const room = rooms?.get(roomId);
 
+            // Plan tracks: only tracks whose .vtt isn't already on disk.
+            const toExtract = streams
+                .map((stream, i) => ({
+                    stream,
+                    i,
+                    filename: `embedded-${infoHash.slice(0, 8)}-${stream.index}.vtt`
+                }))
+                .map(t => ({ ...t, outputPath: path.join(subtitlesDir, t.filename) }))
+                .filter(t => !fs.existsSync(t.outputPath));
+
             let extracted = 0;
             let failed = 0;
-            for (const [i, stream] of streams.entries()) {
-                const filename = `embedded-${infoHash.slice(0, 8)}-${stream.index}.vtt`;
-                const outputPath = path.join(subtitlesDir, filename);
-
-                if (!fs.existsSync(outputPath)) {
-                    try {
-                        await ffmpegExtractSubtitle(filePath, stream.index, outputPath);
-                        extracted++;
-                    } catch (e) {
-                        console.error(`Failed to extract subtitle stream ${stream.index}:`, e.message);
-                        failed++;
-                        continue;
-                    }
+            if (toExtract.length > 0) {
+                try {
+                    await ffmpegExtractSubtitles(
+                        filePath,
+                        toExtract.map(t => ({ streamIndex: t.stream.index, outputPath: t.outputPath }))
+                    );
+                    extracted = toExtract.length;
+                } catch (e) {
+                    console.error('Failed to extract subtitle tracks:', e.message);
+                    failed = toExtract.length;
                 }
+            }
 
-                // Always register with room (handles server restart / re-extraction)
+            // Register each stream with the room (regardless of whether it was
+            // just extracted or already existed on disk from a prior attempt).
+            for (const { stream, i, filename } of streams.map((s, i) => ({
+                stream: s, i, filename: `embedded-${infoHash.slice(0, 8)}-${s.index}.vtt`
+            }))) {
+                const outputPath = path.join(subtitlesDir, filename);
+                if (!fs.existsSync(outputPath)) continue; // extraction failed
+
                 const lang = stream.tags?.language || 'und';
                 const title = stream.tags?.title;
                 const label = title ? `${lang} - ${title}` : `${lang} (Track ${i + 1})`;
@@ -1924,8 +1963,18 @@ app.post('/upload', requireRoomAdmin, (req, res) => {
     });
 });
 
+// Browsers only render WebVTT through a <track>. ffmpeg's webvtt encoder
+// converts SRT/ASS/SSA/MicroDVD-SUB into plain VTT (styling is dropped, timing
+// kept) so uploaded subs in any of those formats actually display.
+function ffmpegConvertSubtitleToVtt(inputPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        execFile('ffmpeg', ['-y', '-i', inputPath, '-c:s', 'webvtt', outputPath],
+            { timeout: 60000 }, (err) => err ? reject(err) : resolve());
+    });
+}
+
 app.post('/upload-subtitle', requireRoomAdmin, (req, res) => {
-    subtitleUpload.single('subtitle')(req, res, (err) => {
+    subtitleUpload.single('subtitle')(req, res, async (err) => {
         if (err) {
             console.error('Subtitle upload error:', err);
             return res.status(500).json({ error: 'Subtitle upload failed' });
@@ -1936,17 +1985,36 @@ app.post('/upload-subtitle', requireRoomAdmin, (req, res) => {
         }
 
         const roomId = req.body.roomId || req.query.roomId;
+
+        // <track> can only render WebVTT. ASS/SSA/SUB (and some SRT variants)
+        // won't load in the browser, so normalize anything that isn't already
+        // .vtt to a .vtt sibling via ffmpeg. On failure, keep the original file
+        // (the serve route still converts plain SRT in JS as a fallback).
+        let filename = req.file.filename;
+        const ext = path.extname(filename).toLowerCase();
+        if (ext !== '.vtt') {
+            const vttName = filename.replace(/\.[^.]+$/, '') + '.vtt';
+            const vttPath = path.join(path.dirname(req.file.path), vttName);
+            try {
+                await ffmpegConvertSubtitleToVtt(req.file.path, vttPath);
+                fs.unlink(req.file.path, () => {}); // drop the original on success
+                filename = vttName;
+            } catch (e) {
+                console.error(`Subtitle conversion (${ext}) failed, serving original:`, e.message);
+            }
+        }
+
         const subtitleInfo = {
-            filename: req.file.filename,
+            filename: filename,
             originalName: req.file.originalname,
             size: req.file.size,
-            url: `/rooms/${roomId}/subtitles/${req.file.filename}`,
+            url: `/rooms/${roomId}/subtitles/${filename}`,
             language: req.body.language || 'Unknown',
             label: req.body.label || req.file.originalname,
             roomId: roomId
         };
 
-        console.log('Subtitle uploaded:', subtitleInfo.originalName, 'to room:', roomId);
+        console.log('Subtitle uploaded:', subtitleInfo.originalName, '->', filename, 'room:', roomId);
         res.json(subtitleInfo);
     });
 });
@@ -2153,7 +2221,7 @@ io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
 
     socket.on('join-room', async (userData) => {
-        const { roomId, userName, isCreator } = userData;
+        const { roomId, userName, isCreator } = userData || {};
         const session = socket.request.session;
 
         if (!roomId || roomId.length !== ROOM_CODE_LENGTH || !ROOM_CODE_PATTERN.test(roomId)) {
@@ -2329,7 +2397,7 @@ io.on('connection', (socket) => {
 
         room.lastActivity = Date.now();
 
-        const { action, time, playbackRate } = data;
+        const { action, time, playbackRate } = data || {};
 
         switch (action) {
             case 'play':
@@ -2370,7 +2438,7 @@ io.on('connection', (socket) => {
 
         room.lastActivity = Date.now();
 
-        const { action, mediaData } = data;
+        const { action, mediaData } = data || {};
 
         room.subtitles = [];
         const _completedExtractions = app.get('completedExtractions');
@@ -2384,6 +2452,15 @@ io.on('connection', (socket) => {
                     loadedBy: user.name,
                     loadedAt: new Date()
                 };
+                // Kick off subtitle extraction right away — if the file isn't
+                // done yet, the watcher polls and extracts on completion. Runs
+                // in parallel with playback/transcoding instead of being
+                // gated on the playback endpoint call.
+                if (extractEmbeddedSubtitles && mediaData?.infoHash !== undefined && mediaData?.fileIndex !== undefined) {
+                    extractEmbeddedSubtitles(mediaData.infoHash, parseInt(mediaData.fileIndex), user.room).catch(e =>
+                        console.error(`Eager subtitle extraction failed for ${user.room}:`, e.message)
+                    );
+                }
                 break;
             case 'load-file':
                 room.currentMedia = {
@@ -2476,7 +2553,7 @@ io.on('connection', (socket) => {
         room.lastActivity = Date.now();
 
         socket.to(user.room).emit('subtitle-selected', {
-            subtitleId: data.subtitleId,
+            subtitleId: (data || {}).subtitleId,
             user: user.name
         });
     });
@@ -2494,7 +2571,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const { targetUserName } = data;
+        const { targetUserName } = data || {};
         const targetUser = Array.from(room.users.values())
             .find(u => u.name === targetUserName && u.role === 'guest');
 
@@ -2567,7 +2644,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const { targetUserName } = data;
+        const { targetUserName } = data || {};
         const targetUser = Array.from(room.users.values())
             .find(u => u.name === targetUserName);
 
@@ -2646,7 +2723,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('validate-room', (data) => {
-        const { roomId } = data;
+        const { roomId } = data || {};
         if (rooms.has(roomId)) {
             socket.emit('room-exists');
         } else {
