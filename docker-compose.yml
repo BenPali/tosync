@@ -13,9 +13,13 @@ services:
       - VPN_TYPE=wireguard
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
       - WIREGUARD_ADDRESSES=10.2.0.2/32
-      - DNS_ADDRESS=10.2.0.1
+      # Use gluetun's own DNS-over-TLS instead of the Proton gateway's plaintext
+      # DNS (10.2.0.1), which was timing out and keeping the container unhealthy.
       - SERVER_COUNTRIES=Switzerland
       - VPN_PORT_FORWARDING=on
+      # Explicit killswitch: block all non-tunnel traffic so nothing leaks if
+      # the VPN drops (this is gluetun's default, pinned here for clarity).
+      - FIREWALL=on
     ports:
       - "127.0.0.1:3001:3001"
       - "127.0.0.1:8888:8888"
