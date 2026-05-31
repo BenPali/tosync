@@ -4,6 +4,10 @@ RUN apt-get update && apt-get install -y python3 make g++ ffmpeg && rm -rf /var/
 
 WORKDIR /app
 
+# Dev deps include @playwright/test (for local tests only); never download
+# Playwright browsers during the image build — they are pruned out anyway.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 COPY package*.json ./
 
 RUN npm ci
