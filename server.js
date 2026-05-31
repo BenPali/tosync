@@ -27,6 +27,13 @@ const ENABLE_TORRENTS = process.env.ENABLE_TORRENTS === 'true';
 const PORT = process.env.PORT || 3000;
 const STATIC_DIR = ENABLE_TORRENTS ? 'private' : 'public';
 
+// Upload limits. Room-admin is a non-auth, transferable role (any guest can
+// hold it), so uploads are a public-reachable disk-DoS vector — cap per-file,
+// per-room, and global storage. Tune via env to your disk.
+const MAX_UPLOAD_BYTES = (parseInt(process.env.MAX_UPLOAD_GB) || 8) * 1024 * 1024 * 1024;
+const MAX_ROOM_BYTES = (parseInt(process.env.MAX_ROOM_STORAGE_GB) || 25) * 1024 * 1024 * 1024;
+const MAX_TOTAL_BYTES = (parseInt(process.env.MAX_TOTAL_STORAGE_GB) || 150) * 1024 * 1024 * 1024;
+
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 const VERSION = pkg.version;
 
@@ -470,7 +477,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+    limits: { fileSize: MAX_UPLOAD_BYTES },
     fileFilter: (req, file, cb) => {
         const allowedTypes = /mp4|mkv|avi|webm|mov|flv|wmv|m4v/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -1913,6 +1920,31 @@ function requireRoomAdmin(req, res, next) {
     return res.status(403).json({ error: 'Admin required' });
 }
 
+// Sum the byte size of files directly inside a directory (non-recursive).
+function dirSizeBytes(dir) {
+    let total = 0;
+    try {
+        for (const name of fs.readdirSync(dir)) {
+            try {
+                const st = fs.statSync(path.join(dir, name));
+                if (st.isFile()) total += st.size;
+            } catch { /* file vanished mid-scan */ }
+        }
+    } catch { /* dir missing */ }
+    return total;
+}
+
+// Total bytes across every room's videos directory — the global storage usage.
+function totalRoomsStorageBytes() {
+    let total = 0;
+    try {
+        for (const room of fs.readdirSync(roomsDir)) {
+            total += dirSizeBytes(path.join(roomsDir, room, 'videos'));
+        }
+    } catch { /* roomsDir missing */ }
+    return total;
+}
+
 app.post('/upload', requireRoomAdmin, (req, res) => {
     req.setTimeout(60 * 60 * 1000);
     res.setTimeout(60 * 60 * 1000);
@@ -1921,7 +1953,7 @@ app.post('/upload', requireRoomAdmin, (req, res) => {
         if (err) {
             console.error('Upload error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(413).json({ error: 'File too large. Maximum size is 10GB.' });
+                return res.status(413).json({ error: `File too large. Maximum size is ${Math.round(MAX_UPLOAD_BYTES / (1024 ** 3))}GB.` });
             }
             return res.status(500).json({ error: 'Upload failed' });
         }
@@ -1950,6 +1982,24 @@ app.post('/upload', requireRoomAdmin, (req, res) => {
         }
 
         const roomId = req.body.roomId || req.query.roomId;
+
+        // Room isolation: a room-admin (which any guest can become) may only
+        // write into their own room. Site admins bypass. The file is already
+        // on disk, so remove it on rejection.
+        if (req.session.isRoomAdmin && !req.session.isAdmin && req.session.roomId !== roomId) {
+            await fs.promises.unlink(req.file.path).catch(() => {});
+            return res.status(403).json({ error: 'You can only upload to your own room' });
+        }
+
+        // Disk-DoS guard: reject if this upload pushes the room or the whole
+        // instance over its storage budget (the file is counted since it is
+        // already written).
+        const roomVideosDir = path.resolve(roomsDir, roomId, 'videos');
+        if (dirSizeBytes(roomVideosDir) > MAX_ROOM_BYTES || totalRoomsStorageBytes() > MAX_TOTAL_BYTES) {
+            await fs.promises.unlink(req.file.path).catch(() => {});
+            return res.status(413).json({ error: 'Storage limit reached. Remove existing media or contact the host.' });
+        }
+
         const fileInfo = {
             filename: req.file.filename,
             originalName: req.file.originalname,
@@ -1985,6 +2035,13 @@ app.post('/upload-subtitle', requireRoomAdmin, (req, res) => {
         }
 
         const roomId = req.body.roomId || req.query.roomId;
+
+        // Room isolation: a room-admin (any guest can become one) may only write
+        // into their own room, so a malicious sub can't be injected elsewhere.
+        if (req.session.isRoomAdmin && !req.session.isAdmin && req.session.roomId !== roomId) {
+            await fs.promises.unlink(req.file.path).catch(() => {});
+            return res.status(403).json({ error: 'You can only upload to your own room' });
+        }
 
         // <track> can only render WebVTT. ASS/SSA/SUB (and some SRT variants)
         // won't load in the browser, so normalize anything that isn't already
@@ -2857,10 +2914,12 @@ app.get('/:roomCode', (req, res) => {
     res.redirect('/');
 });
 
-app.get('/api/library/:roomId', (req, res) => {
+app.get('/api/library/:roomId', requireRoomAccess, (req, res) => {
     try {
         const { roomId } = req.params;
-        const { videosDir } = ensureRoomDirectories(roomId);
+        // requireRoomAccess already validated the room code and membership.
+        // Resolve read-only — do NOT create directories for arbitrary callers.
+        const videosDir = path.resolve(roomsDir, roomId, 'videos');
 
         const library = { uploads: [], downloads: [] };
 
@@ -2900,7 +2959,7 @@ app.get('/api/library/:roomId', (req, res) => {
     }
 });
 
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', requireAdmin, (req, res) => {
     res.json({
         instance: ENABLE_TORRENTS ? 'private' : 'public',
         uptime: process.uptime(),
