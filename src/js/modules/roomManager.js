@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
-import { socketManager, authManager, torrentManager, uiManager } from '../main.js';
+import { authManager, torrentManager, uiManager } from '../main.js';
 import { destroyHls } from './codecUtils.js';
 
 export class RoomManager {
@@ -69,7 +69,7 @@ export class RoomManager {
 
     proceedWithRoomCreation() {
         const adminNameInput = document.getElementById('adminNameInput');
-        const adminName = adminNameInput ? (adminNameInput.value.trim() || 'Admin') : 'Admin';
+        const adminName = adminNameInput ? adminNameInput.value.trim() || 'Admin' : 'Admin';
 
         const roomCode = this.generateRoomCode();
         state.currentRoomId = roomCode;
@@ -204,7 +204,7 @@ export class RoomManager {
         if (joinBtn) {
             joinBtn.addEventListener('click', () => {
                 const nameInput = document.getElementById('guestNameJoin');
-                const name = nameInput ? (nameInput.value.trim() || 'Anonymous') : 'Anonymous';
+                const name = nameInput ? nameInput.value.trim() || 'Anonymous' : 'Anonymous';
                 authManager.setRole('guest', name);
                 const form = document.getElementById('guestJoinForm');
                 if (form) form.remove();
@@ -241,18 +241,21 @@ export class RoomManager {
     }
 
     copyToClipboard(text, buttonId) {
-        navigator.clipboard.writeText(text).then(() => {
-            const button = document.getElementById(buttonId);
-            if (button) {
-                const originalText = button.textContent;
-                button.textContent = '✓';
-                setTimeout(() => {
-                    button.textContent = originalText;
-                }, 2000);
-            }
-        }).catch(err => {
-            console.error('Failed to copy:', err);
-        });
+        navigator.clipboard
+            .writeText(text)
+            .then(() => {
+                const button = document.getElementById(buttonId);
+                if (button) {
+                    const originalText = button.textContent;
+                    button.textContent = '✓';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                    }, 2000);
+                }
+            })
+            .catch((err) => {
+                console.error('Failed to copy:', err);
+            });
     }
 
     async navigateToHome() {
@@ -324,7 +327,7 @@ export class RoomManager {
         state.availableSubtitles = [];
         state.selectedSubtitleId = null;
         state.userRole = null;
-        state.userName = "Anonymous";
+        state.userName = 'Anonymous';
         state.isConnected = false;
 
         const guestJoinForm = document.getElementById('guestJoinForm');

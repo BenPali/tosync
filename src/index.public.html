@@ -1,358 +1,587 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ToSync</title>
-    <!-- Theme bootstrap runs BEFORE stylesheet to avoid FOUC -->
-    <script src="theme.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ToSync</title>
+        <!-- Theme bootstrap runs BEFORE stylesheet to avoid FOUC -->
+        <script src="theme.js"></script>
+        <script
+            src="https://cdn.socket.io/4.7.5/socket.io.min.js"
             integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"
-            crossorigin="anonymous"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <style>
-        /* Subtitle popover: desktop dropdown growing rightward from CC button
+            crossorigin="anonymous"
+        ></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="styles.css" />
+        <style>
+            /* Subtitle popover: desktop dropdown growing rightward from CC button
            (CC sits left-of-center in the transport bar, so right-anchoring
            always clipped the left edge). Mobile = fixed bottom sheet. */
-        .cc-popover {
-            position: absolute;
-            /* Open UPWARD from the CC button: it lives in the transport bar near
+            .cc-popover {
+                position: absolute;
+                /* Open UPWARD from the CC button: it lives in the transport bar near
                the bottom of the screen, so a downward dropdown pushed the upload
                form below the viewport and clipped it (the "Choose File" bug). */
-            bottom: 100%;
-            top: auto;
-            left: 0;
-            right: auto;
-            margin-bottom: 0.5rem;
-            width: 20rem;
-            max-width: calc(100vw - 1rem);
-            /* Never taller than the viewport; scroll if there are many tracks. */
-            max-height: min(70vh, 28rem);
-            overflow-y: auto;
-        }
-        @media (max-width: 640px) {
-            .cc-popover {
-                position: fixed;
+                bottom: 100%;
                 top: auto;
-                bottom: 0.5rem;
-                left: 0.5rem;
-                right: 0.5rem;
-                width: auto;
-                max-width: none;
-                max-height: 70vh;
+                left: 0;
+                right: auto;
+                margin-bottom: 0.5rem;
+                width: 20rem;
+                max-width: calc(100vw - 1rem);
+                /* Never taller than the viewport; scroll if there are many tracks. */
+                max-height: min(70vh, 28rem);
                 overflow-y: auto;
             }
-        }
-        /* Fullscreen: fill the screen edge-to-edge. The 16:9 aspect-video ratio
+            @media (max-width: 640px) {
+                .cc-popover {
+                    position: fixed;
+                    top: auto;
+                    bottom: 0.5rem;
+                    left: 0.5rem;
+                    right: 0.5rem;
+                    width: auto;
+                    max-width: none;
+                    max-height: 70vh;
+                    overflow-y: auto;
+                }
+            }
+            /* Fullscreen: fill the screen edge-to-edge. The 16:9 aspect-video ratio
            would otherwise letterbox the player inside the fullscreen surface on
            non-16:9 / scaled displays (the "only fills the window" bug). */
-        .aspect-video:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; }
-        .aspect-video:-webkit-full-screen { aspect-ratio: auto; width: 100vw; height: 100vh; }
-        .aspect-video:fullscreen video { width: 100%; height: 100%; object-fit: contain; }
-        .aspect-video:-webkit-full-screen video { width: 100%; height: 100%; object-fit: contain; }
-    </style>
-</head>
+            .aspect-video:fullscreen {
+                aspect-ratio: auto;
+                width: 100vw;
+                height: 100vh;
+            }
+            .aspect-video:-webkit-full-screen {
+                aspect-ratio: auto;
+                width: 100vw;
+                height: 100vh;
+            }
+            .aspect-video:fullscreen video {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .aspect-video:-webkit-full-screen video {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+        </style>
+    </head>
 
-<body class="min-h-screen antialiased">
-
-    <!-- ════════════════════════ NAV ════════════════════════ -->
-    <nav class="sticky top-0 z-40 backdrop-blur-md bg-neutral-950/75 border-b hairline">
-        <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-            <div class="flex items-center gap-2.5">
-                <div class="w-6 h-6 rounded-md bg-primary flex items-center justify-center text-neutral-950 text-[11px] font-bold">T</div>
-                <span class="text-sm font-semibold">ToSync</span>
-            </div>
-            <button id="themeToggleBtn" title="Toggle light/dark"
-                class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
-                aria-label="Toggle theme">
-                <svg data-theme-icon="dark" class="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-                <svg data-theme-icon="light" class="hidden w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 5a1 1 0 0 1-1-1V2a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1zm0 14a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM5 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zm17 0a1 1 0 0 1-1 1h-2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zM6.05 7.46a1 1 0 0 1-1.42 0l-1.4-1.41a1 1 0 1 1 1.41-1.42l1.41 1.41a1 1 0 0 1 0 1.42zm12.73 12.73a1 1 0 0 1-1.42 0l-1.4-1.41a1 1 0 0 1 1.41-1.42l1.41 1.41a1 1 0 0 1 0 1.42zM6.05 16.54a1 1 0 0 1 0 1.42l-1.41 1.41a1 1 0 1 1-1.42-1.41l1.41-1.42a1 1 0 0 1 1.42 0zm12.73-12.73a1 1 0 0 1 0 1.42l-1.41 1.41a1 1 0 0 1-1.42-1.42l1.41-1.41a1 1 0 0 1 1.42 0zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
-                </svg>
-            </button>
-        </div>
-    </nav>
-
-    <!-- ════════════════════════ MAIN ════════════════════════ -->
-    <main class="max-w-6xl mx-auto px-6 py-8">
-
-        <!-- ── Landing (create / join) ── -->
-        <div id="roomSelector" class="max-w-3xl mx-auto mt-8 fade-in">
-            <div class="text-center mb-10">
-                <h2 class="text-3xl font-semibold text-neutral-100 mb-3">Watch together.</h2>
-                <p class="text-neutral-400">Synchronized video playback for you and your friends.</p>
-            </div>
-            <div class="grid md:grid-cols-2 gap-4">
-                <div class="surface border hairline rounded-xl p-6">
-                    <h3 class="text-lg font-medium text-neutral-100 mb-2">Create room</h3>
-                    <p class="text-sm text-neutral-500 mb-5">Start a new session as admin — you control playback.</p>
-                    <button id="createRoomBtn"
-                        class="w-full bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40">
-                        New room
-                    </button>
-                </div>
-                <div class="surface border hairline rounded-xl p-6">
-                    <h3 class="text-lg font-medium text-neutral-100 mb-2">Join room</h3>
-                    <p class="text-sm text-neutral-500 mb-3">Enter the code shared by your friend.</p>
-                    <input type="text" id="roomCodeInput" placeholder="Room code" maxlength="{{ROOM_CODE_LENGTH}}"
-                        class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-center text-base font-mono py-2.5 px-3 mb-3 uppercase focus-visible:outline-none transition">
-                    <button id="joinRoomBtn"
-                        class="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 font-semibold py-2.5 rounded-lg transition">
-                        Join
-                    </button>
-                    <div id="joinError"
-                        class="hidden mt-3 text-red-400 text-center text-sm">Invalid room code</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ── Room not found ── -->
-        <div id="roomNotFound" class="hidden max-w-md mx-auto mt-16 text-center fade-in">
-            <div class="text-4xl mb-4">🔒</div>
-            <h3 class="text-xl font-semibold text-neutral-100 mb-2">Room not found</h3>
-            <p class="text-neutral-400 mb-6 text-sm">
-                Code <span id="invalidRoomCode" class="font-mono text-neutral-100 bg-neutral-100/5 border hairline px-2 py-0.5 rounded"></span> is invalid or expired.
-            </p>
-            <button id="goBackHomeBtn"
-                class="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 px-6 py-2.5 rounded-lg text-sm transition">
-                Back to home
-            </button>
-        </div>
-
-        <!-- Role selector mount point (empty; dynamic forms inject here via JS) -->
-        <div id="roleSelector" class="hidden"></div>
-
-        <!-- ══════════════ MAIN ROOM VIEW ══════════════ -->
-        <div id="mainApp" class="hidden fade-in">
-
-            <!-- Identity strip -->
-            <section class="mb-8 flex flex-wrap items-center justify-between gap-4">
-                <div class="flex items-center gap-4 flex-wrap">
-                    <div id="connectionStatus" class="flex items-center gap-2 text-xs text-neutral-400">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Connecting…
+    <body class="min-h-screen antialiased">
+        <!-- ════════════════════════ NAV ════════════════════════ -->
+        <nav class="sticky top-0 z-40 backdrop-blur-md bg-neutral-950/75 border-b hairline">
+            <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div
+                        class="w-6 h-6 rounded-md bg-primary flex items-center justify-center text-neutral-950 text-[11px] font-bold"
+                    >
+                        T
                     </div>
-                    <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
-                    <div class="flex items-center gap-3">
-                        <div id="roleIndicator"
-                            class="admin-glow text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 rounded-full px-2.5 py-0.5 uppercase tracking-wider">
-                            Guest
+                    <span class="text-sm font-semibold">ToSync</span>
+                </div>
+                <button
+                    id="themeToggleBtn"
+                    title="Toggle light/dark"
+                    class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
+                    aria-label="Toggle theme"
+                >
+                    <svg data-theme-icon="dark" class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                    <svg data-theme-icon="light" class="hidden w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path
+                            d="M12 5a1 1 0 0 1-1-1V2a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1zm0 14a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM5 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zm17 0a1 1 0 0 1-1 1h-2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zM6.05 7.46a1 1 0 0 1-1.42 0l-1.4-1.41a1 1 0 1 1 1.41-1.42l1.41 1.41a1 1 0 0 1 0 1.42zm12.73 12.73a1 1 0 0 1-1.42 0l-1.4-1.41a1 1 0 0 1 1.41-1.42l1.41 1.41a1 1 0 0 1 0 1.42zM6.05 16.54a1 1 0 0 1 0 1.42l-1.41 1.41a1 1 0 1 1-1.42-1.41l1.41-1.42a1 1 0 0 1 1.42 0zm12.73-12.73a1 1 0 0 1 0 1.42l-1.41 1.41a1 1 0 0 1-1.42-1.42l1.41-1.41a1 1 0 0 1 1.42 0zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"
+                        />
+                    </svg>
+                </button>
+            </div>
+        </nav>
+
+        <!-- ════════════════════════ MAIN ════════════════════════ -->
+        <main class="max-w-6xl mx-auto px-6 py-8">
+            <!-- ── Landing (create / join) ── -->
+            <div id="roomSelector" class="max-w-3xl mx-auto mt-8 fade-in">
+                <div class="text-center mb-10">
+                    <h2 class="text-3xl font-semibold text-neutral-100 mb-3">Watch together.</h2>
+                    <p class="text-neutral-400">Synchronized video playback for you and your friends.</p>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="surface border hairline rounded-xl p-6">
+                        <h3 class="text-lg font-medium text-neutral-100 mb-2">Create room</h3>
+                        <p class="text-sm text-neutral-500 mb-5">
+                            Start a new session as admin — you control playback.
+                        </p>
+                        <button
+                            id="createRoomBtn"
+                            class="w-full bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40"
+                        >
+                            New room
+                        </button>
+                    </div>
+                    <div class="surface border hairline rounded-xl p-6">
+                        <h3 class="text-lg font-medium text-neutral-100 mb-2">Join room</h3>
+                        <p class="text-sm text-neutral-500 mb-3">Enter the code shared by your friend.</p>
+                        <input
+                            type="text"
+                            id="roomCodeInput"
+                            placeholder="Room code"
+                            maxlength="{{ROOM_CODE_LENGTH}}"
+                            class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-center text-base font-mono py-2.5 px-3 mb-3 uppercase focus-visible:outline-none transition"
+                        />
+                        <button
+                            id="joinRoomBtn"
+                            class="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 font-semibold py-2.5 rounded-lg transition"
+                        >
+                            Join
+                        </button>
+                        <div id="joinError" class="hidden mt-3 text-red-400 text-center text-sm">Invalid room code</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Room not found ── -->
+            <div id="roomNotFound" class="hidden max-w-md mx-auto mt-16 text-center fade-in">
+                <div class="text-4xl mb-4">🔒</div>
+                <h3 class="text-xl font-semibold text-neutral-100 mb-2">Room not found</h3>
+                <p class="text-neutral-400 mb-6 text-sm">
+                    Code
+                    <span
+                        id="invalidRoomCode"
+                        class="font-mono text-neutral-100 bg-neutral-100/5 border hairline px-2 py-0.5 rounded"
+                    ></span>
+                    is invalid or expired.
+                </p>
+                <button
+                    id="goBackHomeBtn"
+                    class="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 px-6 py-2.5 rounded-lg text-sm transition"
+                >
+                    Back to home
+                </button>
+            </div>
+
+            <!-- Role selector mount point (empty; dynamic forms inject here via JS) -->
+            <div id="roleSelector" class="hidden"></div>
+
+            <!-- ══════════════ MAIN ROOM VIEW ══════════════ -->
+            <div id="mainApp" class="hidden fade-in">
+                <!-- Identity strip -->
+                <section class="mb-8 flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-4 flex-wrap">
+                        <div id="connectionStatus" class="flex items-center gap-2 text-xs text-neutral-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Connecting…
                         </div>
-                        <div id="userInfo" class="text-sm text-neutral-200">Anonymous</div>
-                    </div>
-                    <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
-                    <button id="currentRoomCode"
-                        class="group flex items-center gap-2 text-sm font-mono hover:text-neutral-100 transition"
-                        title="Click to copy URL">
-                        <span class="text-neutral-500 text-[11px] uppercase tracking-wider">Room</span>
-                        <span class="text-neutral-200 font-semibold tracking-wider">...</span>
-                        <svg class="w-3 h-3 text-neutral-600 group-hover:text-primary transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                    </button>
-                </div>
-
-                <div class="flex items-center gap-4">
-                    <div class="flex flex-col items-end gap-1">
-                        <div id="usersList" class="flex items-center -space-x-1.5"></div>
-                        <div id="connectedUsers" class="text-[10px] text-neutral-600 font-mono whitespace-nowrap">0 connected</div>
-                        <div id="adminUserInstructions" class="hidden"></div>
-                    </div>
-                    <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
-                    <button id="leaveRoomBtn"
-                        class="text-xs text-neutral-400 hover:text-red-400 transition">
-                        Leave
-                    </button>
-                </div>
-            </section>
-
-            <!-- Grid -->
-            <div class="grid lg:grid-cols-3 gap-6">
-
-                <!-- LEFT COLUMN -->
-                <div class="lg:col-span-2 space-y-0 min-w-0">
-
-                    <!-- Player + fused status strip -->
-                    <div class="surface border hairline rounded-t-xl overflow-hidden">
-                        <div class="relative bg-black aspect-video">
-                            <video id="videoPlayer" class="w-full h-full" controls preload="metadata" crossorigin="anonymous"></video>
-                        </div>
-                        <div class="flex items-center gap-3 px-4 py-2 text-xs border-t hairline">
-                            <span id="mediaStatus" class="flex-1 text-neutral-300 truncate">No media</span>
-                            <div class="w-24 h-0.5 bg-neutral-100/5 rounded-full overflow-hidden">
-                                <div id="progressFill" class="h-full bg-primary rounded-full progress-glow" style="width: 0%"></div>
+                        <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
+                        <div class="flex items-center gap-3">
+                            <div
+                                id="roleIndicator"
+                                class="admin-glow text-[10px] font-semibold text-primary bg-primary/10 border border-primary/30 rounded-full px-2.5 py-0.5 uppercase tracking-wider"
+                            >
+                                Guest
                             </div>
-                            <span id="roomStatus" class="text-emerald-500 font-mono text-[11px]">active</span>
-                            <span class="text-neutral-700">·</span>
-                            <span id="syncStatus" class="text-neutral-500 font-mono text-[11px]">ready</span>
-                            <span class="text-neutral-700">·</span>
-                            <span id="lastAction" class="text-neutral-500 font-mono text-[11px] truncate max-w-[10rem]">—</span>
+                            <div id="userInfo" class="text-sm text-neutral-200">Anonymous</div>
                         </div>
+                        <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
+                        <button
+                            id="currentRoomCode"
+                            class="group flex items-center gap-2 text-sm font-mono hover:text-neutral-100 transition"
+                            title="Click to copy URL"
+                        >
+                            <span class="text-neutral-500 text-[11px] uppercase tracking-wider">Room</span>
+                            <span class="text-neutral-200 font-semibold tracking-wider">...</span>
+                            <svg
+                                class="w-3 h-3 text-neutral-600 group-hover:text-primary transition"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                />
+                            </svg>
+                        </button>
                     </div>
 
-                    <!-- Transport bar -->
-                    <div class="surface border border-t-0 hairline rounded-b-xl p-2 flex items-center gap-1 flex-wrap">
-                        <button id="togglePlayBtn"
-                            class="flex items-center gap-2 bg-primary hover:opacity-90 text-neutral-950 text-sm font-medium px-5 py-2 rounded-lg transition">
-                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                            <span>Play</span>
+                    <div class="flex items-center gap-4">
+                        <div class="flex flex-col items-end gap-1">
+                            <div id="usersList" class="flex items-center -space-x-1.5"></div>
+                            <div id="connectedUsers" class="text-[10px] text-neutral-600 font-mono whitespace-nowrap">
+                                0 connected
+                            </div>
+                            <div id="adminUserInstructions" class="hidden"></div>
+                        </div>
+                        <span class="hidden sm:block h-4 w-px bg-neutral-100/10"></span>
+                        <button id="leaveRoomBtn" class="text-xs text-neutral-400 hover:text-red-400 transition">
+                            Leave
                         </button>
-                        <button id="seekBackBtn" title="−10s"
-                            class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
-                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
-                        </button>
-                        <button id="seekForwardBtn" title="+10s"
-                            class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
-                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
-                        </button>
+                    </div>
+                </section>
 
-                        <div class="w-px h-5 bg-neutral-100/10 mx-1"></div>
+                <!-- Grid -->
+                <div class="grid lg:grid-cols-3 gap-6">
+                    <!-- LEFT COLUMN -->
+                    <div class="lg:col-span-2 space-y-0 min-w-0">
+                        <!-- Player + fused status strip -->
+                        <div class="surface border hairline rounded-t-xl overflow-hidden">
+                            <div class="relative bg-black aspect-video">
+                                <video
+                                    id="videoPlayer"
+                                    class="w-full h-full"
+                                    controls
+                                    preload="metadata"
+                                    crossorigin="anonymous"
+                                ></video>
+                            </div>
+                            <div class="flex items-center gap-3 px-4 py-2 text-xs border-t hairline">
+                                <span id="mediaStatus" class="flex-1 text-neutral-300 truncate">No media</span>
+                                <div class="w-24 h-0.5 bg-neutral-100/5 rounded-full overflow-hidden">
+                                    <div
+                                        id="progressFill"
+                                        class="h-full bg-primary rounded-full progress-glow"
+                                        style="width: 0%"
+                                    ></div>
+                                </div>
+                                <span id="roomStatus" class="text-emerald-500 font-mono text-[11px]">active</span>
+                                <span class="text-neutral-700">·</span>
+                                <span id="syncStatus" class="text-neutral-500 font-mono text-[11px]">ready</span>
+                                <span class="text-neutral-700">·</span>
+                                <span
+                                    id="lastAction"
+                                    class="text-neutral-500 font-mono text-[11px] truncate max-w-[10rem]"
+                                    >—</span
+                                >
+                            </div>
+                        </div>
 
-                        <!-- Subtitles popover -->
-                        <details id="subtitleSection" class="relative">
-                            <summary class="list-none cursor-pointer p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition flex items-center gap-1" title="Subtitles">
-                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>
-                                <span class="text-xs">CC</span>
-                            </summary>
-                            <div class="cc-popover bg-neutral-800 border hairline rounded-xl shadow-2xl overflow-hidden z-30">
-                                <div class="px-4 py-2.5 border-b hairline text-xs text-neutral-400">Subtitle tracks</div>
-                                <div id="subtitlesList" class="divide-y divide-neutral-100/5 max-h-64 overflow-y-auto"></div>
-                                <div id="subtitleTimingControl" class="hidden flex items-center justify-between px-4 py-2.5 border-t hairline">
-                                    <span class="text-xs text-neutral-400">Timing offset</span>
-                                    <div class="flex items-center gap-1.5">
-                                        <button id="subtitleOffsetDownBtn" title="Subtitles earlier (−0.5s)" class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline transition">−</button>
-                                        <span id="subtitleOffsetReadout" class="text-xs font-mono text-neutral-200 w-14 text-center tabular-nums">0.0s</span>
-                                        <button id="subtitleOffsetUpBtn" title="Subtitles later (+0.5s)" class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline transition">+</button>
+                        <!-- Transport bar -->
+                        <div
+                            class="surface border border-t-0 hairline rounded-b-xl p-2 flex items-center gap-1 flex-wrap"
+                        >
+                            <button
+                                id="togglePlayBtn"
+                                class="flex items-center gap-2 bg-primary hover:opacity-90 text-neutral-950 text-sm font-medium px-5 py-2 rounded-lg transition"
+                            >
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                <span>Play</span>
+                            </button>
+                            <button
+                                id="seekBackBtn"
+                                title="−10s"
+                                class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
+                            >
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                    <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" />
+                                </svg>
+                            </button>
+                            <button
+                                id="seekForwardBtn"
+                                title="+10s"
+                                class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
+                            >
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                    <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
+                                </svg>
+                            </button>
+
+                            <div class="w-px h-5 bg-neutral-100/10 mx-1"></div>
+
+                            <!-- Subtitles popover -->
+                            <details id="subtitleSection" class="relative">
+                                <summary
+                                    class="list-none cursor-pointer p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition flex items-center gap-1"
+                                    title="Subtitles"
+                                >
+                                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                        <path
+                                            d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"
+                                        />
+                                    </svg>
+                                    <span class="text-xs">CC</span>
+                                </summary>
+                                <div
+                                    class="cc-popover bg-neutral-800 border hairline rounded-xl shadow-2xl overflow-hidden z-30"
+                                >
+                                    <div class="px-4 py-2.5 border-b hairline text-xs text-neutral-400">
+                                        Subtitle tracks
+                                    </div>
+                                    <div
+                                        id="subtitlesList"
+                                        class="divide-y divide-neutral-100/5 max-h-64 overflow-y-auto"
+                                    ></div>
+                                    <div
+                                        id="subtitleTimingControl"
+                                        class="hidden flex items-center justify-between px-4 py-2.5 border-t hairline"
+                                    >
+                                        <span class="text-xs text-neutral-400">Timing offset</span>
+                                        <div class="flex items-center gap-1.5">
+                                            <button
+                                                id="subtitleOffsetDownBtn"
+                                                title="Subtitles earlier (−0.5s)"
+                                                class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline transition"
+                                            >
+                                                −
+                                            </button>
+                                            <span
+                                                id="subtitleOffsetReadout"
+                                                class="text-xs font-mono text-neutral-200 w-14 text-center tabular-nums"
+                                                >0.0s</span
+                                            >
+                                            <button
+                                                id="subtitleOffsetUpBtn"
+                                                title="Subtitles later (+0.5s)"
+                                                class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline transition"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="subtitleUploadForm" class="hidden p-3 border-t hairline space-y-2">
+                                        <div class="text-[10px] uppercase tracking-wider text-neutral-300">
+                                            Upload track
+                                        </div>
+                                        <input
+                                            type="file"
+                                            id="subtitleInput"
+                                            class="w-full text-xs text-neutral-400 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:bg-neutral-800 file:text-neutral-300 file:text-xs file:cursor-pointer"
+                                        />
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <input
+                                                type="text"
+                                                id="subtitleLanguage"
+                                                placeholder="Lang"
+                                                class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none"
+                                            />
+                                            <input
+                                                type="text"
+                                                id="subtitleLabel"
+                                                placeholder="Label"
+                                                class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none"
+                                            />
+                                        </div>
+                                        <button
+                                            id="uploadSubtitleBtn"
+                                            class="w-full text-sm text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline py-1.5 rounded-lg transition"
+                                        >
+                                            Add subtitle
+                                        </button>
                                     </div>
                                 </div>
-                                <div id="subtitleUploadForm" class="hidden p-3 border-t hairline space-y-2">
-                                    <div class="text-[10px] uppercase tracking-wider text-neutral-300">Upload track</div>
-                                    <input type="file" id="subtitleInput"
-                                        class="w-full text-xs text-neutral-400 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:bg-neutral-800 file:text-neutral-300 file:text-xs file:cursor-pointer">
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <input type="text" id="subtitleLanguage" placeholder="Lang"
-                                            class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none">
-                                        <input type="text" id="subtitleLabel" placeholder="Label"
-                                            class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none">
-                                    </div>
-                                    <button id="uploadSubtitleBtn"
-                                        class="w-full text-sm text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline py-1.5 rounded-lg transition">
-                                        Add subtitle
+                            </details>
+
+                            <div class="w-px h-5 bg-neutral-100/10 mx-1"></div>
+
+                            <!-- Admin transport extras -->
+                            <div id="adminPlayerControls" class="hidden flex items-center gap-1">
+                                <button
+                                    id="syncTimeBtn"
+                                    title="Force sync"
+                                    class="p-2 rounded-lg text-neutral-400 hover:text-primary hover:bg-neutral-100/5 transition"
+                                >
+                                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                        <path
+                                            d="M17.65 6.35A7.958 7.958 0 0012 4C7.58 4 4 7.58 4 12s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    id="restartBtn"
+                                    title="Restart"
+                                    class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
+                                >
+                                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                                    </svg>
+                                </button>
+                                <div class="flex items-center border hairline rounded-lg overflow-hidden ml-1">
+                                    <button
+                                        id="rate1Btn"
+                                        class="px-2.5 py-1.5 text-xs font-mono bg-primary/20 text-primary transition"
+                                    >
+                                        1×
+                                    </button>
+                                    <button
+                                        id="rate15Btn"
+                                        class="px-2.5 py-1.5 text-xs font-mono text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-100 transition"
+                                    >
+                                        1.5×
                                     </button>
                                 </div>
                             </div>
-                        </details>
 
-                        <div class="w-px h-5 bg-neutral-100/10 mx-1"></div>
-
-                        <!-- Admin transport extras -->
-                        <div id="adminPlayerControls" class="hidden flex items-center gap-1">
-                            <button id="syncTimeBtn" title="Force sync"
-                                class="p-2 rounded-lg text-neutral-400 hover:text-primary hover:bg-neutral-100/5 transition">
-                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4C7.58 4 4 7.58 4 12s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                            <button
+                                id="fullscreenBtn"
+                                title="Fullscreen"
+                                class="ml-auto p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
+                            >
+                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                    <path
+                                        d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
+                                    />
+                                </svg>
                             </button>
-                            <button id="restartBtn" title="Restart"
-                                class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
-                                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-                            </button>
-                            <div class="flex items-center border hairline rounded-lg overflow-hidden ml-1">
-                                <button id="rate1Btn" class="px-2.5 py-1.5 text-xs font-mono bg-primary/20 text-primary transition">1×</button>
-                                <button id="rate15Btn" class="px-2.5 py-1.5 text-xs font-mono text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-100 transition">1.5×</button>
-                            </div>
                         </div>
-
-                        <button id="fullscreenBtn" title="Fullscreen"
-                            class="ml-auto p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition">
-                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
-                        </button>
                     </div>
+
+                    <!-- RIGHT SIDEBAR (public: upload + library only) -->
+                    <aside class="min-w-0">
+                        <div
+                            id="adminControls"
+                            class="hidden surface border hairline rounded-xl overflow-hidden sticky top-20"
+                        >
+                            <div class="px-4 py-3 border-b hairline flex items-center justify-between">
+                                <span class="text-sm font-medium text-neutral-200">Source</span>
+                                <span class="text-[10px] text-neutral-500 font-mono">admin</span>
+                            </div>
+
+                            <!-- Upload drop zone -->
+                            <div class="p-4 space-y-3">
+                                <label for="fileInput" class="block cursor-pointer">
+                                    <div
+                                        class="drop-zone border border-dashed hairline rounded-lg px-3 py-8 text-center transition"
+                                    >
+                                        <svg
+                                            class="w-6 h-6 mx-auto mb-2 text-neutral-500"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="1.5"
+                                                d="M7 16a4 4 0 01-.88-7.9A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12"
+                                            />
+                                        </svg>
+                                        <div class="text-sm text-neutral-300">
+                                            Drop a video or <span class="text-primary">browse</span>
+                                        </div>
+                                        <div class="text-[11px] text-neutral-500 mt-1 font-mono">
+                                            mp4 · mkv · webm · mov · up to 10 GB
+                                        </div>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        id="fileInput"
+                                        accept=".mp4,.mkv,.avi,.webm,.mov,.m4v,.flv,.wmv,video/*"
+                                        class="hidden"
+                                    />
+                                </label>
+
+                                <div class="flex gap-2">
+                                    <button
+                                        id="uploadBtn"
+                                        class="flex-1 text-sm font-medium bg-primary hover:opacity-90 text-neutral-950 py-2 rounded-lg transition"
+                                    >
+                                        Upload &amp; stream
+                                    </button>
+                                    <button
+                                        id="clearMediaBtn"
+                                        title="Clear current media"
+                                        class="p-2 text-neutral-500 hover:text-red-400 hover:bg-neutral-100/5 border hairline rounded-lg transition"
+                                    >
+                                        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                            <path
+                                                d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="border-t hairline"></div>
+
+                            <!-- Library (collapsed) -->
+                            <details class="group">
+                                <summary
+                                    class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-neutral-100/[0.02] transition text-sm text-neutral-300 select-none"
+                                >
+                                    <div class="flex items-center gap-2">
+                                        <span>Library</span>
+                                        <span id="libraryStatus" class="text-xs text-neutral-500 font-mono">empty</span>
+                                    </div>
+                                    <svg
+                                        class="w-3.5 h-3.5 fill-current text-neutral-500 group-open:rotate-90 transition"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path d="M10 17l5-5-5-5v10z" />
+                                    </svg>
+                                </summary>
+                                <div class="px-4 pb-4">
+                                    <button
+                                        id="refreshLibraryBtn"
+                                        class="text-xs text-neutral-500 hover:text-primary mb-2 transition"
+                                    >
+                                        Refresh
+                                    </button>
+                                    <div id="uploadedFilesList" class="space-y-1"></div>
+                                </div>
+                            </details>
+                        </div>
+                    </aside>
                 </div>
-
-                <!-- RIGHT SIDEBAR (public: upload + library only) -->
-                <aside class="min-w-0">
-                    <div id="adminControls" class="hidden surface border hairline rounded-xl overflow-hidden sticky top-20">
-                        <div class="px-4 py-3 border-b hairline flex items-center justify-between">
-                            <span class="text-sm font-medium text-neutral-200">Source</span>
-                            <span class="text-[10px] text-neutral-500 font-mono">admin</span>
-                        </div>
-
-                        <!-- Upload drop zone -->
-                        <div class="p-4 space-y-3">
-                            <label for="fileInput" class="block cursor-pointer">
-                                <div class="drop-zone border border-dashed hairline rounded-lg px-3 py-8 text-center transition">
-                                    <svg class="w-6 h-6 mx-auto mb-2 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.9A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12"/></svg>
-                                    <div class="text-sm text-neutral-300">Drop a video or <span class="text-primary">browse</span></div>
-                                    <div class="text-[11px] text-neutral-500 mt-1 font-mono">mp4 · mkv · webm · mov · up to 10 GB</div>
-                                </div>
-                                <input type="file" id="fileInput"
-                                    accept=".mp4,.mkv,.avi,.webm,.mov,.m4v,.flv,.wmv,video/*"
-                                    class="hidden">
-                            </label>
-
-                            <div class="flex gap-2">
-                                <button id="uploadBtn"
-                                    class="flex-1 text-sm font-medium bg-primary hover:opacity-90 text-neutral-950 py-2 rounded-lg transition">
-                                    Upload &amp; stream
-                                </button>
-                                <button id="clearMediaBtn" title="Clear current media"
-                                    class="p-2 text-neutral-500 hover:text-red-400 hover:bg-neutral-100/5 border hairline rounded-lg transition">
-                                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="border-t hairline"></div>
-
-                        <!-- Library (collapsed) -->
-                        <details class="group">
-                            <summary class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-neutral-100/[0.02] transition text-sm text-neutral-300 select-none">
-                                <div class="flex items-center gap-2">
-                                    <span>Library</span>
-                                    <span id="libraryStatus" class="text-xs text-neutral-500 font-mono">empty</span>
-                                </div>
-                                <svg class="w-3.5 h-3.5 fill-current text-neutral-500 group-open:rotate-90 transition" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
-                            </summary>
-                            <div class="px-4 pb-4">
-                                <button id="refreshLibraryBtn"
-                                    class="text-xs text-neutral-500 hover:text-primary mb-2 transition">Refresh</button>
-                                <div id="uploadedFilesList" class="space-y-1"></div>
-                            </div>
-                        </details>
-                    </div>
-                </aside>
             </div>
+        </main>
+
+        <!-- Keyboard shortcuts pill (shown when in a room) -->
+        <div id="shortcutsHint" class="hidden fixed bottom-4 right-4 z-30">
+            <button
+                class="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-200 bg-neutral-900/80 backdrop-blur border hairline rounded-full px-3 py-1.5 transition"
+            >
+                <kbd class="font-mono text-[11px] text-neutral-400 bg-neutral-800 border hairline rounded px-1.5 py-0.5"
+                    >?</kbd
+                >
+                <span>shortcuts</span>
+            </button>
         </div>
-    </main>
 
-    <!-- Keyboard shortcuts pill (shown when in a room) -->
-    <div id="shortcutsHint" class="hidden fixed bottom-4 right-4 z-30">
-        <button class="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-200 bg-neutral-900/80 backdrop-blur border hairline rounded-full px-3 py-1.5 transition">
-            <kbd class="font-mono text-[11px] text-neutral-400 bg-neutral-800 border hairline rounded px-1.5 py-0.5">?</kbd>
-            <span>shortcuts</span>
-        </button>
-    </div>
+        <!-- Toast stack -->
+        <div
+            id="toastStack"
+            class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)] pointer-events-none"
+        ></div>
 
-    <!-- Toast stack -->
-    <div id="toastStack" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)] pointer-events-none"></div>
+        <footer class="border-t hairline mt-12 py-6 text-center text-xs text-neutral-500">
+            <p class="text-neutral-400 font-medium">ToSync <span class="text-neutral-600">v{{VERSION}}</span></p>
+            <p class="mt-1 text-neutral-500">Watch together, stay connected</p>
+            <div class="flex justify-center gap-4 mt-3">
+                <a
+                    href="https://github.com/benpali/tosync"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="hover:text-primary transition"
+                    >GitHub</a
+                >
+                <a
+                    href="https://github.com/benpali/tosync/issues"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="hover:text-primary transition"
+                    >Issues</a
+                >
+                <a
+                    href="https://github.com/benpali/tosync/blob/main/README.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="hover:text-primary transition"
+                    >Docs</a
+                >
+            </div>
+            <p class="mt-3 text-neutral-600">❤️ by Ben Pali &middot; &copy; 2026</p>
+        </footer>
 
-    <footer class="border-t hairline mt-12 py-6 text-center text-xs text-neutral-500">
-        <p class="text-neutral-400 font-medium">ToSync <span class="text-neutral-600">v{{VERSION}}</span></p>
-        <p class="mt-1 text-neutral-500">Watch together, stay connected</p>
-        <div class="flex justify-center gap-4 mt-3">
-            <a href="https://github.com/benpali/tosync" target="_blank" rel="noopener noreferrer"
-                class="hover:text-primary transition">GitHub</a>
-            <a href="https://github.com/benpali/tosync/issues" target="_blank" rel="noopener noreferrer"
-                class="hover:text-primary transition">Issues</a>
-            <a href="https://github.com/benpali/tosync/blob/main/README.md" target="_blank" rel="noopener noreferrer"
-                class="hover:text-primary transition">Docs</a>
-        </div>
-        <p class="mt-3 text-neutral-600">❤️ by Ben Pali &middot; &copy; 2026</p>
-    </footer>
-
-    <script type="module" src="js/main.js"></script>
-</body>
+        <script type="module" src="js/main.js"></script>
+    </body>
 </html>

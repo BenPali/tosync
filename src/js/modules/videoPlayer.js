@@ -50,7 +50,11 @@ export class VideoPlayer {
     handleRateChange() {
         if (state.isLiveStream) return;
         if (!state.isReceivingSync && state.isConnected) {
-            socketManager.broadcastVideoAction('playback-rate', state.videoPlayer.currentTime, state.videoPlayer.playbackRate);
+            socketManager.broadcastVideoAction(
+                'playback-rate',
+                state.videoPlayer.currentTime,
+                state.videoPlayer.playbackRate
+            );
             uiManager.updateLastAction(`${state.userName} changed speed to ${state.videoPlayer.playbackRate}x`);
         }
     }
@@ -173,15 +177,21 @@ export class VideoPlayer {
                     if (state.videoPlayer.paused) {
                         // typeof check, not truthiness: time 0 is a valid position
                         // (a play/pause at the very start must still correct us).
-                        if (typeof data.time === 'number' && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
+                        if (
+                            typeof data.time === 'number' &&
+                            Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance
+                        ) {
                             this.seekWhenReady(data.time);
                         }
-                        state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
+                        state.videoPlayer.play().catch((e) => console.log('Auto-play prevented:', e));
                     }
                     break;
                 case 'pause':
                     if (!state.videoPlayer.paused) {
-                        if (typeof data.time === 'number' && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
+                        if (
+                            typeof data.time === 'number' &&
+                            Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance
+                        ) {
                             this.seekWhenReady(data.time);
                         }
                         state.videoPlayer.pause();
@@ -199,7 +209,10 @@ export class VideoPlayer {
                 }
                 case 'playback-rate':
                     state.videoPlayer.playbackRate = data.playbackRate || 1;
-                    if (data.time !== undefined && Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance) {
+                    if (
+                        data.time !== undefined &&
+                        Math.abs(state.videoPlayer.currentTime - data.time) > syncTolerance
+                    ) {
                         this.seekWhenReady(data.time);
                     }
                     break;

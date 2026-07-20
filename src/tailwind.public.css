@@ -15,24 +15,24 @@
         color-scheme: dark;
 
         /* Mocha: neutral scale */
-        --neutral-50:  205 214 244;  /* text           #cdd6f4 */
-        --neutral-100: 205 214 244;  /* text */
-        --neutral-200: 186 194 222;  /* subtext1       #bac2de */
-        --neutral-300: 166 173 200;  /* subtext0       #a6adc8 */
-        --neutral-400: 147 153 178;  /* overlay2       #9399b2 */
-        --neutral-500: 127 132 156;  /* overlay1       #7f849c */
-        --neutral-600: 108 112 134;  /* overlay0       #6c7086 */
-        --neutral-700:  69  71  90;  /* surface1       #45475a */
-        --neutral-800:  49  50  68;  /* surface0       #313244 */
-        --neutral-900:  24  24  37;  /* mantle         #181825 */
-        --neutral-950:  30  30  46;  /* base           #1e1e2e */
+        --neutral-50: 205 214 244; /* text           #cdd6f4 */
+        --neutral-100: 205 214 244; /* text */
+        --neutral-200: 186 194 222; /* subtext1       #bac2de */
+        --neutral-300: 166 173 200; /* subtext0       #a6adc8 */
+        --neutral-400: 147 153 178; /* overlay2       #9399b2 */
+        --neutral-500: 127 132 156; /* overlay1       #7f849c */
+        --neutral-600: 108 112 134; /* overlay0       #6c7086 */
+        --neutral-700: 69 71 90; /* surface1       #45475a */
+        --neutral-800: 49 50 68; /* surface0       #313244 */
+        --neutral-900: 24 24 37; /* mantle         #181825 */
+        --neutral-950: 30 30 46; /* base           #1e1e2e */
 
         /* Mocha accents */
         --color-primary: 137 180 250; /* blue          #89b4fa */
-        --color-accent:  250 179 135; /* peach         #fab387 */
+        --color-accent: 250 179 135; /* peach         #fab387 */
         --color-success: 166 227 161; /* green         #a6e3a1 */
         --color-warning: 249 226 175; /* yellow        #f9e2af */
-        --color-error:   243 139 168; /* red           #f38ba8 */
+        --color-error: 243 139 168; /* red           #f38ba8 */
 
         /* Theming knobs */
         --hairline: 255 255 255 / 0.08;
@@ -49,38 +49,44 @@
         color-scheme: light;
 
         /* Latte: neutral scale (inverted — 950 is still body bg, now lightest) */
-        --neutral-50:   76  79 105;  /* text           #4c4f69 */
-        --neutral-100:  76  79 105;  /* text */
-        --neutral-200:  92  95 119;  /* subtext1       #5c5f77 */
-        --neutral-300: 108 111 133;  /* subtext0       #6c6f85 */
-        --neutral-400: 124 127 147;  /* overlay2       #7c7f93 */
-        --neutral-500: 140 143 161;  /* overlay1       #8c8fa1 */
-        --neutral-600: 156 160 176;  /* overlay0       #9ca0b0 */
-        --neutral-700: 188 192 204;  /* surface1       #bcc0cc */
-        --neutral-800: 204 208 218;  /* surface0       #ccd0da */
-        --neutral-900: 230 233 239;  /* mantle         #e6e9ef */
-        --neutral-950: 239 241 245;  /* base           #eff1f5 */
+        --neutral-50: 76 79 105; /* text           #4c4f69 */
+        --neutral-100: 76 79 105; /* text */
+        --neutral-200: 92 95 119; /* subtext1       #5c5f77 */
+        --neutral-300: 108 111 133; /* subtext0       #6c6f85 */
+        --neutral-400: 124 127 147; /* overlay2       #7c7f93 */
+        --neutral-500: 140 143 161; /* overlay1       #8c8fa1 */
+        --neutral-600: 156 160 176; /* overlay0       #9ca0b0 */
+        --neutral-700: 188 192 204; /* surface1       #bcc0cc */
+        --neutral-800: 204 208 218; /* surface0       #ccd0da */
+        --neutral-900: 230 233 239; /* mantle         #e6e9ef */
+        --neutral-950: 239 241 245; /* base           #eff1f5 */
 
         /* Latte accents */
-        --color-primary:  30 102 245; /* blue          #1e66f5 */
-        --color-accent:  254 100  11; /* peach         #fe640b */
-        --color-success:  64 160  43; /* green         #40a02b */
-        --color-warning: 223 142  29; /* yellow        #df8e1d */
-        --color-error:   210  15  57; /* red           #d20f39 */
+        --color-primary: 30 102 245; /* blue          #1e66f5 */
+        --color-accent: 254 100 11; /* peach         #fe640b */
+        --color-success: 64 160 43; /* green         #40a02b */
+        --color-warning: 223 142 29; /* yellow        #df8e1d */
+        --color-error: 210 15 57; /* red           #d20f39 */
 
         --hairline: 0 0 0 / 0.08;
         --input-bg: 188 192 204; /* Latte surface1 — darker than card */
     }
 
-    html, body {
-        font-family: 'Figtree', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    html,
+    body {
+        font-family:
+            'Figtree',
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            sans-serif;
     }
 
     body {
         color: rgb(var(--neutral-100));
         background-color: rgb(var(--neutral-950));
         background-image:
-            radial-gradient(ellipse 60% 50% at 90% 0%, rgb(var(--color-primary) / 0.10) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 50% at 90% 0%, rgb(var(--color-primary) / 0.1) 0%, transparent 60%),
             radial-gradient(ellipse 50% 40% at 0% 100%, rgb(var(--color-accent) / 0.06) 0%, transparent 60%);
         background-attachment: fixed;
     }
@@ -97,7 +103,10 @@
         background-color: rgb(var(--neutral-400) / 0.25);
     }
 
-    input:focus, button:focus { outline: none; }
+    input:focus,
+    button:focus {
+        outline: none;
+    }
     input:focus-visible {
         box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.25);
         border-color: rgb(var(--color-primary) / 0.4);
@@ -109,7 +118,9 @@
         font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
     }
 
-    .hairline { border-color: rgb(var(--hairline)); }
+    .hairline {
+        border-color: rgb(var(--hairline));
+    }
 
     /* Catppuccin: card surfaces use surface0 (mantle is for secondary panes,
        not cards). Solid fill at 70% so the radial body wash still reads through
@@ -124,7 +135,9 @@
             0 4px 16px -4px rgb(var(--color-primary) / 0.3);
     }
 
-    .progress-glow { box-shadow: 0 0 8px rgb(var(--color-primary) / 0.5); }
+    .progress-glow {
+        box-shadow: 0 0 8px rgb(var(--color-primary) / 0.5);
+    }
 
     .drop-zone:hover {
         background: linear-gradient(160deg, rgb(var(--color-primary) / 0.05), transparent);
@@ -137,8 +150,14 @@
         animation: fadeIn 0.3s ease-in-out;
     }
     @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(5px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 }
 
@@ -146,20 +165,26 @@
     width: 8px;
     height: 8px;
 }
-::-webkit-scrollbar-track { background: rgb(var(--neutral-900)); }
+::-webkit-scrollbar-track {
+    background: rgb(var(--neutral-900));
+}
 ::-webkit-scrollbar-thumb {
     background: rgb(var(--neutral-700));
     border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgb(var(--neutral-600)); }
+::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--neutral-600));
+}
 
-input[type="range"] {
+input[type='range'] {
     -webkit-appearance: none;
     appearance: none;
     background: transparent;
 }
-input[type="range"]::-webkit-slider-thumb {
+input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
 }
-input[type="range"]:focus { outline: none; }
+input[type='range']:focus {
+    outline: none;
+}

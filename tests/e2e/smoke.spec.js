@@ -8,7 +8,7 @@ const SUB = path.join(__dirname, '../fixtures/sample.srt');
 
 async function login(page) {
     const res = await page.request.post('/api/auth/login', {
-        data: { username: 'admin', password: 'test123' },
+        data: { username: 'admin', password: 'test123' }
     });
     expect(res.ok(), 'admin login should succeed').toBeTruthy();
 }
@@ -18,8 +18,9 @@ async function createRoom(page, name = 'E2E') {
     await page.evaluate(async (nm) => {
         document.getElementById('createRoomBtn')?.click();
         await new Promise((r) => setTimeout(r, 200));
-        const inputs = [...document.querySelectorAll('input[type=text], input:not([type])')]
-            .filter((i) => i.offsetParent !== null);
+        const inputs = [...document.querySelectorAll('input[type=text], input:not([type])')].filter(
+            (i) => i.offsetParent !== null
+        );
         if (inputs[0]) {
             inputs[0].value = nm;
             inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
@@ -49,7 +50,7 @@ test('critical path: login → room → video → subtitle (picker) → render �
             return {
                 timingVisible: !document.getElementById('subtitleTimingControl').classList.contains('hidden'),
                 uploadVisible: !document.getElementById('subtitleUploadForm').classList.contains('hidden'),
-                formOnScreen: form.top >= 0 && form.bottom <= vh,
+                formOnScreen: form.top >= 0 && form.bottom <= vh
             };
         });
         // The old downward popover pushed this form below the viewport → unclickable.
@@ -63,32 +64,44 @@ test('critical path: login → room → video → subtitle (picker) → render �
         await page.fill('#subtitleLabel', 'E2ESub');
         await page.click('#uploadSubtitleBtn');
         await expect
-            .poll(() => page.evaluate(() =>
-                [...document.querySelectorAll('#subtitlesList [data-subtitle-item]')]
-                    .some((r) => r.dataset.subtitleItem.includes('E2ESub'))), { timeout: 10_000 })
+            .poll(
+                () =>
+                    page.evaluate(() =>
+                        [...document.querySelectorAll('#subtitlesList [data-subtitle-item]')].some((r) =>
+                            r.dataset.subtitleItem.includes('E2ESub')
+                        )
+                    ),
+                { timeout: 10_000 }
+            )
             .toBe(true);
         await page.evaluate(() => {
-            const row = [...document.querySelectorAll('#subtitlesList [data-subtitle-item]')]
-                .find((r) => r.dataset.subtitleItem.includes('E2ESub'));
+            const row = [...document.querySelectorAll('#subtitlesList [data-subtitle-item]')].find((r) =>
+                r.dataset.subtitleItem.includes('E2ESub')
+            );
             row.click();
         });
         await expect
-            .poll(() => page.evaluate(() => {
-                const tt = document.getElementById('videoPlayer').textTracks[0];
-                return tt && tt.cues ? tt.cues.length : 0;
-            }), { timeout: 10_000 })
+            .poll(
+                () =>
+                    page.evaluate(() => {
+                        const tt = document.getElementById('videoPlayer').textTracks[0];
+                        return tt && tt.cues ? tt.cues.length : 0;
+                    }),
+                { timeout: 10_000 }
+            )
             .toBeGreaterThan(0);
     });
 
     await test.step('timing offset (+) shifts cues and updates the readout', async () => {
-        const before = await page.evaluate(() =>
-            [...document.getElementById('videoPlayer').textTracks[0].cues][0].startTime);
+        const before = await page.evaluate(
+            () => [...document.getElementById('videoPlayer').textTracks[0].cues][0].startTime
+        );
         await page.click('#subtitleOffsetUpBtn');
         await page.click('#subtitleOffsetUpBtn'); // +1.0s total
         await page.waitForTimeout(200);
         const after = await page.evaluate(() => ({
             start: [...document.getElementById('videoPlayer').textTracks[0].cues][0].startTime,
-            readout: document.getElementById('subtitleOffsetReadout').textContent,
+            readout: document.getElementById('subtitleOffsetReadout').textContent
         }));
         expect(after.start).toBeCloseTo(before + 1.0, 2);
         expect(after.readout).toBe('+1.0s');

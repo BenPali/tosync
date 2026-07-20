@@ -11,7 +11,7 @@ export const state = {
 
     // User info
     userRole: null,
-    userName: "Anonymous",
+    userName: 'Anonymous',
 
     // Video player
     videoPlayer: null,

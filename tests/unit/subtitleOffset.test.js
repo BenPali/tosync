@@ -4,7 +4,7 @@ import {
     shiftCueTimes,
     formatOffset,
     SUBTITLE_OFFSET_MIN,
-    SUBTITLE_OFFSET_MAX,
+    SUBTITLE_OFFSET_MAX
 } from '../../src/js/modules/subtitleOffset.js';
 
 describe('clampOffset', () => {

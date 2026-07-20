@@ -1,8 +1,7 @@
 import { state } from '../state.js';
 
 export class UIManager {
-    initialize() {
-    }
+    initialize() {}
 
     updateConnectionStatus(message, status) {
         const el = document.getElementById('connectionStatus');
@@ -12,13 +11,12 @@ export class UIManager {
         // color and the text color based on status; never override the sizing /
         // alignment classes that anchor this into the identity strip.
         const connected = status === 'connected';
-        el.className = 'flex items-center gap-2 text-xs ' +
-            (connected ? 'text-neutral-400' : 'text-red-400 animate-pulse');
+        el.className =
+            'flex items-center gap-2 text-xs ' + (connected ? 'text-neutral-400' : 'text-red-400 animate-pulse');
 
         el.innerHTML = '';
         const dot = document.createElement('span');
-        dot.className = 'w-1.5 h-1.5 rounded-full ' +
-            (connected ? 'bg-emerald-500' : 'bg-red-500');
+        dot.className = 'w-1.5 h-1.5 rounded-full ' + (connected ? 'bg-emerald-500' : 'bg-red-500');
         el.append(dot, document.createTextNode(' ' + message));
     }
 
@@ -60,7 +58,7 @@ export class UIManager {
         usersList.innerHTML = '';
 
         const uniqueUsers = new Map();
-        users.forEach(user => {
+        users.forEach((user) => {
             const key = user.id || user.name;
             if (!uniqueUsers.has(key)) {
                 uniqueUsers.set(key, user);
@@ -75,7 +73,7 @@ export class UIManager {
         const nameMap = new Map();
         const finalUsers = [];
 
-        uniqueUsers.forEach(user => {
+        uniqueUsers.forEach((user) => {
             const baseName = user.name.replace(/_\d+$/, '');
             if (!nameMap.has(baseName)) {
                 nameMap.set(baseName, user);
@@ -83,7 +81,7 @@ export class UIManager {
             } else {
                 const existing = nameMap.get(baseName);
                 if (user.role === 'admin' || (!user.name.includes('_') && existing.name.includes('_'))) {
-                    const index = finalUsers.findIndex(u => u === existing);
+                    const index = finalUsers.findIndex((u) => u === existing);
                     if (index !== -1) finalUsers[index] = user;
                     nameMap.set(baseName, user);
                 }
@@ -102,13 +100,14 @@ export class UIManager {
         }
 
         // Render as presence chips (overlapping circular initials).
-        finalUsers.forEach(user => {
+        finalUsers.forEach((user) => {
             const isSelf = user.name === state.userName || user.id === state.socket?.id;
             const isAdmin = user.role === 'admin';
             const canManage = state.userRole === 'admin' && !isSelf;
 
             const chip = document.createElement('div');
-            const base = 'relative w-7 h-7 rounded-full border-2 border-neutral-950 flex items-center justify-center text-xs font-medium shrink-0';
+            const base =
+                'relative w-7 h-7 rounded-full border-2 border-neutral-950 flex items-center justify-center text-xs font-medium shrink-0';
             const cls = isAdmin
                 ? `${base} bg-primary/15 ring-1 ring-primary/40 text-primary`
                 : `${base} bg-neutral-800 text-neutral-300`;
@@ -116,7 +115,7 @@ export class UIManager {
             chip.textContent = (user.name || '?').charAt(0).toLowerCase();
 
             const suffix = isAdmin ? ' · admin' : ' · guest';
-            const selfTag = isSelf ? ' (you)' : (canManage ? ' · click to manage' : '');
+            const selfTag = isSelf ? ' (you)' : canManage ? ' · click to manage' : '';
             chip.title = `${user.name}${suffix}${selfTag}`;
 
             if (canManage) {
@@ -148,13 +147,16 @@ export class UIManager {
      */
     toast(kind, message, opts = {}) {
         const stack = document.getElementById('toastStack');
-        if (!stack) { console.log(`[toast:${kind}]`, message); return; }
+        if (!stack) {
+            console.log(`[toast:${kind}]`, message);
+            return;
+        }
 
         const palette = {
-            error:   { border: 'border-red-500/40',     text: 'text-red-200',     dot: 'bg-red-500' },
-            warn:    { border: 'border-amber-500/40',   text: 'text-amber-200',   dot: 'bg-amber-500' },
+            error: { border: 'border-red-500/40', text: 'text-red-200', dot: 'bg-red-500' },
+            warn: { border: 'border-amber-500/40', text: 'text-amber-200', dot: 'bg-amber-500' },
             success: { border: 'border-emerald-500/40', text: 'text-emerald-200', dot: 'bg-emerald-500' },
-            info:    { border: 'border-neutral-100/10',       text: 'text-neutral-200', dot: 'bg-neutral-500' },
+            info: { border: 'border-neutral-100/10', text: 'text-neutral-200', dot: 'bg-neutral-500' }
         }[kind] || { border: 'border-neutral-100/10', text: 'text-neutral-200', dot: 'bg-neutral-500' };
 
         const toast = document.createElement('div');
@@ -175,7 +177,7 @@ export class UIManager {
         toast.append(dot, text, close);
         stack.appendChild(toast);
 
-        const timeout = opts.timeout === 0 ? 0 : (opts.timeout || 4000);
+        const timeout = opts.timeout === 0 ? 0 : opts.timeout || 4000;
         if (timeout > 0) {
             setTimeout(() => {
                 toast.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
@@ -204,16 +206,17 @@ export class UIManager {
         const rows = [
             ['Space', 'Play / pause'],
             ['← / →', 'Seek −10s / +10s'],
-            ['F',     'Fullscreen'],
-            ['S',     'Toggle subtitles'],
-            ['?',     'Show this help'],
-            ['Esc',   'Close dialogs'],
+            ['F', 'Fullscreen'],
+            ['S', 'Toggle subtitles'],
+            ['?', 'Show this help'],
+            ['Esc', 'Close dialogs']
         ];
         for (const [key, desc] of rows) {
             const row = document.createElement('div');
             row.className = 'flex items-center justify-between py-1.5 text-sm';
             const keySpan = document.createElement('kbd');
-            keySpan.className = 'font-mono text-[11px] text-neutral-300 bg-neutral-800 border hairline rounded px-2 py-0.5';
+            keySpan.className =
+                'font-mono text-[11px] text-neutral-300 bg-neutral-800 border hairline rounded px-2 py-0.5';
             keySpan.textContent = key;
             const descSpan = document.createElement('span');
             descSpan.className = 'text-neutral-400';

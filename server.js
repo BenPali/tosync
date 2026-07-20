@@ -35,9 +35,6 @@ const MAX_UPLOAD_BYTES = (parseInt(process.env.MAX_UPLOAD_GB) || 8) * 1024 * 102
 const MAX_ROOM_BYTES = (parseInt(process.env.MAX_ROOM_STORAGE_GB) || 25) * 1024 * 1024 * 1024;
 const MAX_TOTAL_BYTES = (parseInt(process.env.MAX_TOTAL_STORAGE_GB) || 150) * 1024 * 1024 * 1024;
 
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-const VERSION = pkg.version;
-
 // Safety net: socket.io does not catch throws inside event listeners, so a
 // single malformed payload would otherwise take down the whole process and
 // every room with it. Log and stay alive rather than crash mid-session.
@@ -79,7 +76,9 @@ try {
     process.exit(1);
 }
 
-console.log(`ToSync ${ENABLE_TORRENTS ? 'Private' : 'Public'} - Port ${PORT} - Admins: ${Object.keys(ADMIN_USERS).length}`);
+console.log(
+    `ToSync ${ENABLE_TORRENTS ? 'Private' : 'Public'} - Port ${PORT} - Admins: ${Object.keys(ADMIN_USERS).length}`
+);
 
 let WebTorrent, torrentClient, activeTorrents;
 if (ENABLE_TORRENTS) {
@@ -118,12 +117,14 @@ const torrentLimiter = rateLimit({
 });
 
 app.use(cookieParser());
-app.use(cors({
-    origin: ENABLE_TORRENTS
-        ? ['https://app.tosync.org', 'https://www.app.tosync.org', 'http://localhost:3001']
-        : ['https://tosync.org', 'https://www.tosync.org', 'http://localhost:3000'],
-    credentials: true
-}));
+app.use(
+    cors({
+        origin: ENABLE_TORRENTS
+            ? ['https://app.tosync.org', 'https://www.app.tosync.org', 'http://localhost:3001']
+            : ['https://tosync.org', 'https://www.tosync.org', 'http://localhost:3000'],
+        credentials: true
+    })
+);
 app.use(express.json({ limit: '200kb' }));
 app.use('/api/', apiLimiter);
 app.set('trust proxy', 1);
@@ -238,7 +239,7 @@ if (ENABLE_TORRENTS) {
         if (!storedPassword) {
             try {
                 await bcrypt.compare(password, '$2b$12$LQv3c1yqBwEHpNxVfLnQKOQMZpz1WxIzyMJtf3Fuz7RB.Iy3GnAkO');
-            } catch { }
+            } catch {}
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -299,7 +300,7 @@ function ensureRoomDirectories(roomId) {
     const videosDir = path.join(roomDir, 'videos');
     const subtitlesDir = path.join(roomDir, 'subtitles');
 
-    [roomDir, videosDir, subtitlesDir].forEach(dir => {
+    [roomDir, videosDir, subtitlesDir].forEach((dir) => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 
@@ -311,25 +312,46 @@ const codecCache = new Map();
 
 function ffprobeCodecs(filePath) {
     return new Promise((resolve, reject) => {
-        execFile('ffprobe', [
-            '-v', 'error',
-            '-probesize', '5M', '-analyzeduration', '5M',
-            '-print_format', 'json',
-            '-show_entries', 'stream=codec_type,codec_name,profile,width,height',
-            '-i', filePath
-        ], { timeout: 10000 }, (err, stdout) => {
-            if (err) return reject(err);
-            try {
-                const data = JSON.parse(stdout);
-                const streams = data.streams || [];
-                const video = streams.find(s => s.codec_type === 'video');
-                const audio = streams.find(s => s.codec_type === 'audio');
-                resolve({
-                    video: video ? { codec: video.codec_name, profile: video.profile, width: video.width, height: video.height } : null,
-                    audio: audio ? { codec: audio.codec_name } : null
-                });
-            } catch (e) { reject(e); }
-        });
+        execFile(
+            'ffprobe',
+            [
+                '-v',
+                'error',
+                '-probesize',
+                '5M',
+                '-analyzeduration',
+                '5M',
+                '-print_format',
+                'json',
+                '-show_entries',
+                'stream=codec_type,codec_name,profile,width,height',
+                '-i',
+                filePath
+            ],
+            { timeout: 10000 },
+            (err, stdout) => {
+                if (err) return reject(err);
+                try {
+                    const data = JSON.parse(stdout);
+                    const streams = data.streams || [];
+                    const video = streams.find((s) => s.codec_type === 'video');
+                    const audio = streams.find((s) => s.codec_type === 'audio');
+                    resolve({
+                        video: video
+                            ? {
+                                  codec: video.codec_name,
+                                  profile: video.profile,
+                                  width: video.width,
+                                  height: video.height
+                              }
+                            : null,
+                        audio: audio ? { codec: audio.codec_name } : null
+                    });
+                } catch (e) {
+                    reject(e);
+                }
+            }
+        );
     });
 }
 
@@ -366,9 +388,7 @@ function startHlsSession(sessionKey, input, needs) {
     hlsTokenMap.set(token, sessionKey);
 
     const isPiped = typeof input !== 'string';
-    const inputFlags = isPiped
-        ? ['-probesize', '50M', '-analyzeduration', '100M', '-i', 'pipe:0']
-        : ['-i', input];
+    const inputFlags = isPiped ? ['-probesize', '50M', '-analyzeduration', '100M', '-i', 'pipe:0'] : ['-i', input];
 
     const audioFlags = ['-c:a', 'aac', '-ac', '2', '-b:a', '192k'];
     const videoFlags = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
@@ -384,18 +404,29 @@ function startHlsSession(sessionKey, input, needs) {
     // -hls_segment_type fmp4 is written relative to cwd, not the playlist
     // dir) resolves correctly. Without this, ffmpeg tries to write init.mp4
     // to the container's / and fails with ENOENT.
-    const proc = spawn('ffmpeg', [
-        ...inputFlags,
-        ...codecFlags,
-        '-f', 'hls',
-        '-hls_time', '2',
-        '-hls_playlist_type', 'event',
-        '-hls_segment_type', 'fmp4',
-        '-hls_list_size', '0',
-        '-hls_base_url', `/api/hls/segments/${token}/`,
-        '-hls_segment_filename', 'seg%05d.m4s',
-        'master.m3u8'
-    ], { cwd: dir, stdio: isPiped ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(
+        'ffmpeg',
+        [
+            ...inputFlags,
+            ...codecFlags,
+            '-f',
+            'hls',
+            '-hls_time',
+            '2',
+            '-hls_playlist_type',
+            'event',
+            '-hls_segment_type',
+            'fmp4',
+            '-hls_list_size',
+            '0',
+            '-hls_base_url',
+            `/api/hls/segments/${token}/`,
+            '-hls_segment_filename',
+            'seg%05d.m4s',
+            'master.m3u8'
+        ],
+        { cwd: dir, stdio: isPiped ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] }
+    );
 
     console.log(`[HLS] Starting session: ${sessionKey} (transcoding: ${needs}, piped: ${isPiped})`);
 
@@ -418,7 +449,9 @@ function startHlsSession(sessionKey, input, needs) {
         // Only clean up if this session is still the current one for this key
         if (code !== 0 && hlsSessions.get(sessionKey) === session) {
             hlsTokenMap.delete(session.token);
-            try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+            try {
+                fs.rmSync(dir, { recursive: true, force: true });
+            } catch {}
             hlsSessions.delete(sessionKey);
         }
     });
@@ -440,23 +473,35 @@ function stopHlsSession(sessionKey) {
     if (session.token) hlsTokenMap.delete(session.token);
 
     if (!session.proc) {
-        try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+        try {
+            fs.rmSync(session.dir, { recursive: true, force: true });
+        } catch {}
         return;
     }
 
     if (session.inputStream) {
-        try { session.inputStream.unpipe(session.proc.stdin); } catch {}
-        try { session.inputStream.destroy(); } catch {}
+        try {
+            session.inputStream.unpipe(session.proc.stdin);
+        } catch {}
+        try {
+            session.inputStream.destroy();
+        } catch {}
     }
 
     if (session.proc.exitCode !== null) {
         // Already exited — clean up synchronously
-        try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+        try {
+            fs.rmSync(session.dir, { recursive: true, force: true });
+        } catch {}
     } else {
         // Still running — kill and clean up after exit
-        try { session.proc.kill('SIGTERM'); } catch {}
+        try {
+            session.proc.kill('SIGTERM');
+        } catch {}
         session.proc.once('close', () => {
-            try { fs.rmSync(session.dir, { recursive: true, force: true }); } catch {}
+            try {
+                fs.rmSync(session.dir, { recursive: true, force: true });
+            } catch {}
         });
     }
 }
@@ -473,7 +518,7 @@ function stopAllHlsSessionsForRoom(roomId) {
             keysToStop.push(key);
         }
     }
-    keysToStop.forEach(k => stopHlsSession(k));
+    keysToStop.forEach((k) => stopHlsSession(k));
 }
 
 const storage = multer.diskStorage({
@@ -521,7 +566,7 @@ const subtitleStorage = multer.diskStorage({
         }
     },
     filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         const safeName = path.basename(file.originalname);
         cb(null, uniqueSuffix + '-' + safeName);
     }
@@ -554,7 +599,7 @@ if (ENABLE_TORRENTS) {
             length: file.length,
             title: parsed.title || null,
             season: parsed.season ?? null,
-            episode: parsed.episode ?? null,
+            episode: parsed.episode ?? null
         };
     }
 
@@ -582,7 +627,7 @@ if (ENABLE_TORRENTS) {
                 if (tracked) {
                     const t = tracked.torrent;
                     if (!t.ready) {
-                        await new Promise(resolve => t.once('ready', resolve));
+                        await new Promise((resolve) => t.once('ready', resolve));
                     }
                     // Register this room as a consumer of the shared torrent so
                     // cleanup only destroys it when the last room leaves, and
@@ -649,7 +694,6 @@ if (ENABLE_TORRENTS) {
                 files: videoFiles.map(({ file, index }) => parseFileInfo(file, index)),
                 totalLength: torrent.length || 0
             });
-
         } catch (error) {
             // Recover zombie torrents stuck in WebTorrent but missing from activeTorrents
             if (error.message && error.message.includes('Cannot add duplicate torrent')) {
@@ -657,7 +701,7 @@ if (ENABLE_TORRENTS) {
                 const existing = infoHash ? await torrentClient.get(infoHash) : null;
                 if (existing) {
                     if (!existing.ready) {
-                        await new Promise(resolve => existing.once('ready', resolve));
+                        await new Promise((resolve) => existing.once('ready', resolve));
                     }
                     activeTorrents.set(existing.infoHash, {
                         torrent: existing,
@@ -720,7 +764,13 @@ if (ENABLE_TORRENTS) {
             files: torrent.files
                 .map((f, i) => ({ file: f, index: i }))
                 .filter(({ file }) => VIDEO_EXTENSIONS.includes(path.extname(file.name).toLowerCase()))
-                .map(({ file, index }) => ({ ...parseFileInfo(file, index), downloaded: file.downloaded, progress: file.progress, done: file.done, selected: selectedForRoom.has(index) }))
+                .map(({ file, index }) => ({
+                    ...parseFileInfo(file, index),
+                    downloaded: file.downloaded,
+                    progress: file.progress,
+                    done: file.done,
+                    selected: selectedForRoom.has(index)
+                }))
         });
     });
 
@@ -786,9 +836,7 @@ if (ENABLE_TORRENTS) {
             torrentInfo.selectedFilesByRoom.delete(callerRoom);
             // Clean up HLS transcode sessions scoped to this room for this torrent.
             const roomPrefix = `torrent-${callerRoom}-${infoHash}-`;
-            [...hlsSessions.keys()]
-                .filter(k => k.startsWith(roomPrefix))
-                .forEach(k => stopHlsSession(k));
+            [...hlsSessions.keys()].filter((k) => k.startsWith(roomPrefix)).forEach((k) => stopHlsSession(k));
             return res.json({ ok: true, detached: true });
         }
 
@@ -797,10 +845,10 @@ if (ENABLE_TORRENTS) {
         // torrent-${roomId}-${infoHash}-${fileIndex}-${needs} — match on infoHash segment)
         const infoHashSegment = `-${infoHash}-`;
         [...hlsSessions.keys()]
-            .filter(k => k.startsWith('torrent-') && k.includes(infoHashSegment))
-            .forEach(k => stopHlsSession(k));
+            .filter((k) => k.startsWith('torrent-') && k.includes(infoHashSegment))
+            .forEach((k) => stopHlsSession(k));
         activeTorrents.delete(infoHash);
-        await new Promise(resolve => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
+        await new Promise((resolve) => torrentInfo.torrent.destroy({ destroyStore: true }, resolve));
         res.json({ ok: true });
     });
 
@@ -814,27 +862,33 @@ if (ENABLE_TORRENTS) {
 
     function ffprobeSubtitles(filePath) {
         return new Promise((resolve, reject) => {
-            execFile('ffprobe', [
-                '-v', 'error', '-print_format', 'json',
-                '-show_entries', 'stream=index,codec_type,codec_name:stream_tags=language,title',
-                '-i', filePath
-            ], { timeout: 30000 }, (err, stdout) => {
-                if (err) return reject(err);
-                try {
-                    const data = JSON.parse(stdout);
-                    const subs = (data.streams || []).filter(s =>
-                        s.codec_type === 'subtitle' && !BITMAP_SUBTITLE_CODECS.has(s.codec_name)
-                    );
-                    resolve(subs);
-                } catch (e) {
-                    reject(e);
+            execFile(
+                'ffprobe',
+                [
+                    '-v',
+                    'error',
+                    '-print_format',
+                    'json',
+                    '-show_entries',
+                    'stream=index,codec_type,codec_name:stream_tags=language,title',
+                    '-i',
+                    filePath
+                ],
+                { timeout: 30000 },
+                (err, stdout) => {
+                    if (err) return reject(err);
+                    try {
+                        const data = JSON.parse(stdout);
+                        const subs = (data.streams || []).filter(
+                            (s) => s.codec_type === 'subtitle' && !BITMAP_SUBTITLE_CODECS.has(s.codec_name)
+                        );
+                        resolve(subs);
+                    } catch (e) {
+                        reject(e);
+                    }
                 }
-            });
+            );
         });
-    }
-
-    function ffmpegExtractSubtitle(inputPath, streamIndex, outputPath) {
-        return ffmpegExtractSubtitles(inputPath, [{ streamIndex, outputPath }]);
     }
 
     // Extract multiple subtitle tracks in a single ffmpeg invocation so we
@@ -845,10 +899,7 @@ if (ENABLE_TORRENTS) {
             for (const { streamIndex, outputPath } of tracks) {
                 outputArgs.push('-map', `0:${streamIndex}`, '-c:s', 'webvtt', outputPath);
             }
-            execFile('ffmpeg', [
-                '-y', '-i', inputPath,
-                ...outputArgs
-            ], { timeout: 180000 }, (err) => {
+            execFile('ffmpeg', ['-y', '-i', inputPath, ...outputArgs], { timeout: 180000 }, (err) => {
                 if (err) return reject(err);
                 resolve();
             });
@@ -879,7 +930,7 @@ if (ENABLE_TORRENTS) {
                 clearInterval(intervalId);
                 extractionWatchers.delete(dedupKey);
                 for (const roomId of info.rooms) {
-                    extractEmbeddedSubtitles(infoHash, fileIndex, roomId).catch(e =>
+                    extractEmbeddedSubtitles(infoHash, fileIndex, roomId).catch((e) =>
                         console.error(`Subtitle extraction for room ${roomId} failed:`, e.message)
                     );
                 }
@@ -897,7 +948,7 @@ if (ENABLE_TORRENTS) {
         }
     }
 
-    extractEmbeddedSubtitles = async function(infoHash, fileIndex, roomId) {
+    extractEmbeddedSubtitles = async function (infoHash, fileIndex, roomId) {
         // Per-room dedup: one torrent can be shared by multiple rooms, and
         // each room needs subtitle files served at /rooms/<roomId>/subtitles/.
         // The previous global dedup made later rooms silently skip extraction.
@@ -955,8 +1006,8 @@ if (ENABLE_TORRENTS) {
                     i,
                     filename: `embedded-${infoHash.slice(0, 8)}-${stream.index}.vtt`
                 }))
-                .map(t => ({ ...t, outputPath: path.join(subtitlesDir, t.filename) }))
-                .filter(t => !fs.existsSync(t.outputPath));
+                .map((t) => ({ ...t, outputPath: path.join(subtitlesDir, t.filename) }))
+                .filter((t) => !fs.existsSync(t.outputPath));
 
             let extracted = 0;
             let failed = 0;
@@ -964,7 +1015,7 @@ if (ENABLE_TORRENTS) {
                 try {
                     await ffmpegExtractSubtitles(
                         filePath,
-                        toExtract.map(t => ({ streamIndex: t.stream.index, outputPath: t.outputPath }))
+                        toExtract.map((t) => ({ streamIndex: t.stream.index, outputPath: t.outputPath }))
                     );
                     extracted = toExtract.length;
                 } catch (e) {
@@ -976,7 +1027,9 @@ if (ENABLE_TORRENTS) {
             // Register each stream with the room (regardless of whether it was
             // just extracted or already existed on disk from a prior attempt).
             for (const { stream, i, filename } of streams.map((s, i) => ({
-                stream: s, i, filename: `embedded-${infoHash.slice(0, 8)}-${s.index}.vtt`
+                stream: s,
+                i,
+                filename: `embedded-${infoHash.slice(0, 8)}-${s.index}.vtt`
             }))) {
                 const outputPath = path.join(subtitlesDir, filename);
                 if (!fs.existsSync(outputPath)) continue; // extraction failed
@@ -994,7 +1047,11 @@ if (ENABLE_TORRENTS) {
                     roomId
                 };
 
-                if (room && room.currentMedia?.data?.infoHash === infoHash && !room.subtitles.some(s => s.filename === filename)) {
+                if (
+                    room &&
+                    room.currentMedia?.data?.infoHash === infoHash &&
+                    !room.subtitles.some((s) => s.filename === filename)
+                ) {
                     room.subtitles.push(subtitleInfo);
                     io.to(roomId).emit('subtitle-added', { subtitle: subtitleInfo, user: 'System' });
                 }
@@ -1046,18 +1103,19 @@ if (ENABLE_TORRENTS) {
         // Extract embedded subtitles in background (fire-and-forget). Target
         // the caller's room so subtitles end up in their state; falls back to
         // the torrent's owner room if somehow unset.
-        extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), callerRoom || torrentInfo.ownerRoomId).catch(e =>
+        extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), callerRoom || torrentInfo.ownerRoomId).catch((e) =>
             console.error('Subtitle extraction failed:', e.message)
         );
 
         const ext = path.extname(file.name).toLowerCase();
-        const contentType = {
-            '.mp4': 'video/mp4',
-            '.webm': 'video/webm',
-            '.mkv': 'video/x-matroska',
-            '.avi': 'video/x-msvideo',
-            '.mov': 'video/quicktime'
-        }[ext] || 'application/octet-stream';
+        const contentType =
+            {
+                '.mp4': 'video/mp4',
+                '.webm': 'video/webm',
+                '.mkv': 'video/x-matroska',
+                '.avi': 'video/x-msvideo',
+                '.mov': 'video/quicktime'
+            }[ext] || 'application/octet-stream';
 
         res.setHeader('Content-Type', contentType);
         res.setHeader('Accept-Ranges', 'bytes');
@@ -1075,7 +1133,7 @@ if (ENABLE_TORRENTS) {
             }
             if (end >= file.length) end = file.length - 1;
 
-            const chunksize = (end - start) + 1;
+            const chunksize = end - start + 1;
 
             res.status(206);
             res.setHeader('Content-Range', `bytes ${start}-${end}/${file.length}`);
@@ -1111,7 +1169,10 @@ if (ENABLE_TORRENTS) {
     });
 
     function parseM3U(content) {
-        const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const lines = content
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => l.length > 0);
 
         if (!lines[0] || !lines[0].startsWith('#EXTM3U')) {
             throw new Error('Invalid M3U file: missing #EXTM3U header');
@@ -1158,9 +1219,9 @@ if (ENABLE_TORRENTS) {
         if (/^10\./.test(ip)) return true;
         if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip)) return true;
         if (/^192\.168\./.test(ip)) return true;
-        if (/^169\.254\./.test(ip)) return true;                          // IPv4 link-local (cloud metadata)
+        if (/^169\.254\./.test(ip)) return true; // IPv4 link-local (cloud metadata)
         if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true; // CGNAT 100.64.0.0/10
-        if (/^(22[4-9]|23\d|24\d|25\d)\./.test(ip)) return true;          // multicast + reserved (224.0.0.0/4, 240.0.0.0/4)
+        if (/^(22[4-9]|23\d|24\d|25\d)\./.test(ip)) return true; // multicast + reserved (224.0.0.0/4, 240.0.0.0/4)
         if (ip === '0.0.0.0' || ip === '255.255.255.255') return true;
 
         if (ip === '::1' || ip === '::') return true;
@@ -1177,14 +1238,15 @@ if (ENABLE_TORRENTS) {
 
     // SSRF-safe fetch dispatcher: forces TCP connect to the already-validated IPs
     // while keeping the URL hostname intact so TLS SNI + Host header stay correct.
-    const ipLockedDispatcher = (lookupResults) => new UndiciAgent({
-        connect: {
-            lookup: (_hostname, options, cb) => {
-                if (options.all) cb(null, lookupResults);
-                else cb(null, lookupResults[0].address, lookupResults[0].family);
-            },
-        },
-    });
+    const ipLockedDispatcher = (lookupResults) =>
+        new UndiciAgent({
+            connect: {
+                lookup: (_hostname, options, cb) => {
+                    if (options.all) cb(null, lookupResults);
+                    else cb(null, lookupResults[0].address, lookupResults[0].family);
+                }
+            }
+        });
 
     // Resolve hostname, block SSRF, return undici dispatcher for that origin.
     // Throws a friendly Error with .status if anything fails.
@@ -1207,18 +1269,25 @@ if (ENABLE_TORRENTS) {
         for (let hop = 0; hop <= maxRedirects; hop++) {
             const parsed = new URL(currentUrl);
             if (!['http:', 'https:'].includes(parsed.protocol)) {
-                const err = new Error('Invalid protocol'); err.status = 400; throw err;
+                const err = new Error('Invalid protocol');
+                err.status = 400;
+                throw err;
             }
             const { dispatcher } = await resolveSsrfSafe(parsed.hostname);
             const response = await fetch(currentUrl, {
-                signal, headers, redirect: 'manual', dispatcher,
+                signal,
+                headers,
+                redirect: 'manual',
+                dispatcher
             });
             if (response.status < 300 || response.status >= 400) return response;
             const location = response.headers.get('location');
             if (!location) return response;
             currentUrl = new URL(location, currentUrl).toString();
         }
-        const err = new Error('Too many redirects'); err.status = 502; throw err;
+        const err = new Error('Too many redirects');
+        err.status = 502;
+        throw err;
     };
 
     app.post('/api/stream/start', requireAdmin, async (req, res) => {
@@ -1275,7 +1344,8 @@ if (ENABLE_TORRENTS) {
             const response = await ssrfSafeFetch(streamUrl, {
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
@@ -1347,7 +1417,7 @@ if (ENABLE_TORRENTS) {
 
                 if (streamInfo.isActive && streamInfo.clients.size > 0) {
                     console.log(`Stream dropped for room ${roomId}, reconnecting in 3s...`);
-                    await new Promise(r => setTimeout(r, 3000));
+                    await new Promise((r) => setTimeout(r, 3000));
 
                     // Re-check after the sleep: a replace/stop/room-cleanup may
                     // have deactivated this stream, or the last viewer may have
@@ -1363,7 +1433,8 @@ if (ENABLE_TORRENTS) {
                             const reconnectResponse = await ssrfSafeFetch(streamUrl, {
                                 signal: newController.signal,
                                 headers: {
-                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                                    'User-Agent':
+                                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                                 }
                             });
 
@@ -1380,10 +1451,10 @@ if (ENABLE_TORRENTS) {
                 }
 
                 streamInfo.isActive = false;
-                for (const [clientId, clientRes] of streamInfo.clients) {
+                for (const clientRes of streamInfo.clients.values()) {
                     try {
                         if (!clientRes.writableEnded) clientRes.end();
-                    } catch (e) { }
+                    } catch (e) {}
                 }
                 // Only clear the map slot if it still points at THIS stream — a
                 // replacement stream may already own roomId (see the replace path
@@ -1403,7 +1474,6 @@ if (ENABLE_TORRENTS) {
                 relayUrl: `/api/stream/relay/${roomId}`,
                 streamName: streamName || undefined
             });
-
         } catch (err) {
             const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
             console.error(`Stream start failed: ${err.message}${causeMsg}`);
@@ -1435,11 +1505,15 @@ if (ENABLE_TORRENTS) {
         // A viewer is back — cancel any pending idle shutdown.
         streamInfo.zeroClientsSince = null;
 
-        console.log(`Client ${clientId} connected to stream relay for room ${roomId} (${streamInfo.clients.size} clients)`);
+        console.log(
+            `Client ${clientId} connected to stream relay for room ${roomId} (${streamInfo.clients.size} clients)`
+        );
 
         req.on('close', () => {
             streamInfo.clients.delete(clientId);
-            console.log(`Client disconnected from stream relay for room ${roomId} (${streamInfo.clients.size} clients remaining)`);
+            console.log(
+                `Client disconnected from stream relay for room ${roomId} (${streamInfo.clients.size} clients remaining)`
+            );
         });
     });
 
@@ -1482,7 +1556,8 @@ if (ENABLE_TORRENTS) {
             const response = await ssrfSafeFetch(playlistUrl, {
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
@@ -1512,16 +1587,19 @@ if (ENABLE_TORRENTS) {
                 sourceUrl: playlistUrl
             });
 
-            console.log(`Playlist loaded for room ${roomId}: ${parsed.channels.length} channels in ${Object.keys(parsed.groups).length} groups`);
+            console.log(
+                `Playlist loaded for room ${roomId}: ${parsed.channels.length} channels in ${Object.keys(parsed.groups).length} groups`
+            );
 
             res.json({
                 channelCount: parsed.channels.length,
-                groups: Object.keys(parsed.groups).sort().map(groupName => ({
-                    name: groupName,
-                    count: parsed.groups[groupName].length
-                }))
+                groups: Object.keys(parsed.groups)
+                    .sort()
+                    .map((groupName) => ({
+                        name: groupName,
+                        count: parsed.groups[groupName].length
+                    }))
             });
-
         } catch (err) {
             const causeMsg = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
             console.error(`Playlist fetch failed: ${err.message}${causeMsg}`);
@@ -1539,10 +1617,12 @@ if (ENABLE_TORRENTS) {
 
         res.json({
             channelCount: playlist.channels.length,
-            groups: Object.keys(playlist.groups).sort().map(groupName => ({
-                name: groupName,
-                count: playlist.groups[groupName].length
-            }))
+            groups: Object.keys(playlist.groups)
+                .sort()
+                .map((groupName) => ({
+                    name: groupName,
+                    count: playlist.groups[groupName].length
+                }))
         });
     });
 
@@ -1564,12 +1644,10 @@ if (ENABLE_TORRENTS) {
             return res.status(404).json({ error: 'Group not found' });
         }
 
-        const channels = indices.map(idx => playlist.channels[idx]);
+        const channels = indices.map((idx) => playlist.channels[idx]);
 
         const query = req.query.q?.toLowerCase();
-        const filtered = query
-            ? channels.filter(ch => ch.name.toLowerCase().includes(query))
-            : channels;
+        const filtered = query ? channels.filter((ch) => ch.name.toLowerCase().includes(query)) : channels;
 
         res.json({ group: groupName, channels: filtered });
     });
@@ -1587,9 +1665,7 @@ if (ENABLE_TORRENTS) {
             return res.status(404).json({ error: 'No playlist loaded for this room' });
         }
 
-        const results = playlist.channels
-            .filter(ch => ch.name.toLowerCase().includes(query))
-            .slice(0, 100);
+        const results = playlist.channels.filter((ch) => ch.name.toLowerCase().includes(query)).slice(0, 100);
 
         res.json({ query, results, totalMatches: results.length });
     });
@@ -1628,7 +1704,8 @@ if (ENABLE_TORRENTS) {
             const response = await ssrfSafeFetch(streamUrl, {
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                 }
             });
 
@@ -1641,13 +1718,16 @@ if (ENABLE_TORRENTS) {
 
             const contentType = response.headers.get('content-type') || '';
             const validTypes = [
-                'video/', 'audio/',
-                'application/x-mpegurl', 'application/vnd.apple.mpegurl',
-                'application/dash+xml', 'application/octet-stream',
+                'video/',
+                'audio/',
+                'application/x-mpegurl',
+                'application/vnd.apple.mpegurl',
+                'application/dash+xml',
+                'application/octet-stream',
                 'text/plain'
             ];
 
-            if (contentType && !validTypes.some(t => contentType.toLowerCase().startsWith(t))) {
+            if (contentType && !validTypes.some((t) => contentType.toLowerCase().startsWith(t))) {
                 console.warn(`Blocked invalid content-type: ${contentType}`);
                 return res.status(400).json({ error: 'Unsupported content type' });
             }
@@ -1695,26 +1775,28 @@ if (ENABLE_TORRENTS) {
         }
     });
 
-    setInterval(() => {
-        const now = Date.now();
-        const maxAge = 3 * 60 * 60 * 1000;
+    setInterval(
+        () => {
+            const now = Date.now();
+            const maxAge = 3 * 60 * 60 * 1000;
 
-        activeTorrents.forEach((info, hash) => {
-            // Never destroy a torrent a room is still watching, regardless of age
-            // — a long binge (>3h) must not have its source torn out mid-stream
-            // (that surfaced as sudden 404s on the segment/file routes). Rooms
-            // that leave already drop the torrent via the size===0 path on
-            // room-cleanup; this GC only reaps genuinely orphaned torrents.
-            if (info.rooms && info.rooms.size > 0) return;
-            if (now - info.addedAt > maxAge && info.torrent.done) {
-                clearExtractionWatchers(hash);
-                info.torrent.destroy({ destroyStore: false });
-                activeTorrents.delete(hash);
-                console.log(`Cleaned up torrent: ${hash.substring(0, 8)}...`);
-            }
-        });
-    }, 30 * 60 * 1000);
-
+            activeTorrents.forEach((info, hash) => {
+                // Never destroy a torrent a room is still watching, regardless of age
+                // — a long binge (>3h) must not have its source torn out mid-stream
+                // (that surfaced as sudden 404s on the segment/file routes). Rooms
+                // that leave already drop the torrent via the size===0 path on
+                // room-cleanup; this GC only reaps genuinely orphaned torrents.
+                if (info.rooms && info.rooms.size > 0) return;
+                if (now - info.addedAt > maxAge && info.torrent.done) {
+                    clearExtractionWatchers(hash);
+                    info.torrent.destroy({ destroyStore: false });
+                    activeTorrents.delete(hash);
+                    console.log(`Cleaned up torrent: ${hash.substring(0, 8)}...`);
+                }
+            });
+        },
+        30 * 60 * 1000
+    );
 } else {
     app.use('/api/torrents', (req, res) => {
         res.status(403).json({ error: 'Torrents not available on this instance' });
@@ -1774,7 +1856,6 @@ app.get('/api/codecs', async (req, res) => {
             } catch {
                 return res.json({ ready: false });
             }
-
         } else if (source === 'upload') {
             const { roomId, filename } = req.query;
             if (!roomId || !filename) return res.status(400).json({ error: 'roomId and filename required' });
@@ -1800,7 +1881,6 @@ app.get('/api/codecs', async (req, res) => {
             const codecs = await ffprobeCodecs(filePath);
             codecCache.set(cacheKey, codecs);
             return res.json({ ready: true, ...codecs });
-
         } else {
             return res.status(400).json({ error: 'Invalid source. Use "torrent" or "upload".' });
         }
@@ -1859,12 +1939,11 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
                 // Extract embedded subtitles (same as raw stream endpoint) and
                 // emit them to the caller's room.
                 if (extractEmbeddedSubtitles) {
-                    extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), sessionRoom).catch(e =>
+                    extractEmbeddedSubtitles(infoHash, parseInt(fileIndex), sessionRoom).catch((e) =>
                         console.error('Subtitle extraction failed:', e.message)
                     );
                 }
             }
-
         } else if (source === 'upload') {
             const { roomId, filename } = req.query;
             if (!roomId || !filename) return res.status(400).json({ error: 'roomId and filename required' });
@@ -1885,7 +1964,6 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
                 }
                 startHlsSession(sessionKey, input, needs);
             }
-
         } else {
             return res.status(400).json({ error: 'Invalid source' });
         }
@@ -1901,9 +1979,12 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
 
         // Wait for playlist, init segment, AND first media segment
         let attempts = 0;
-        while ((!fs.existsSync(playlistPath) || !fs.existsSync(initSegment) || !fs.existsSync(firstSegment)) && attempts < 50) {
+        while (
+            (!fs.existsSync(playlistPath) || !fs.existsSync(initSegment) || !fs.existsSync(firstSegment)) &&
+            attempts < 50
+        ) {
             if (session.proc.exitCode !== null) break; // ffmpeg crashed — don't wait 10s
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise((r) => setTimeout(r, 200));
             attempts++;
         }
 
@@ -1915,14 +1996,10 @@ app.get('/api/hls/master.m3u8', async (req, res) => {
 
         // Patch init segment URI — ffmpeg's -hls_base_url doesn't apply to #EXT-X-MAP
         const playlist = await fs.promises.readFile(playlistPath, 'utf8');
-        const patched = playlist.replace(
-            'URI="init.mp4"',
-            `URI="/api/hls/segments/${session.token}/init.mp4"`
-        );
+        const patched = playlist.replace('URI="init.mp4"', `URI="/api/hls/segments/${session.token}/init.mp4"`);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-cache');
         res.send(patched);
-
     } catch (error) {
         console.error('HLS playlist error:', error.message);
         res.status(500).json({ error: 'HLS transcoding failed' });
@@ -1962,9 +2039,10 @@ app.post('/api/hls/keepalive', (req, res) => {
         if (!torrentInfo) return res.status(404).end();
         // Keepalive must match the same sessionKey the master.m3u8 endpoint created:
         // scoped to the caller's room, with ownerRoomId as fallback.
-        const sessionRoom = req.session?.roomId && torrentInfo.rooms.has(req.session.roomId)
-            ? req.session.roomId
-            : torrentInfo.ownerRoomId;
+        const sessionRoom =
+            req.session?.roomId && torrentInfo.rooms.has(req.session.roomId)
+                ? req.session.roomId
+                : torrentInfo.ownerRoomId;
         sessionKey = `torrent-${sessionRoom}-${infoHash}-${fileIndex}-${needs}`;
     } else if (source === 'upload') {
         const { roomId, filename } = req.query;
@@ -1996,9 +2074,13 @@ function dirSizeBytes(dir) {
             try {
                 const st = fs.statSync(path.join(dir, name));
                 if (st.isFile()) total += st.size;
-            } catch { /* file vanished mid-scan */ }
+            } catch {
+                /* file vanished mid-scan */
+            }
         }
-    } catch { /* dir missing */ }
+    } catch {
+        /* dir missing */
+    }
     return total;
 }
 
@@ -2009,7 +2091,9 @@ function totalRoomsStorageBytes() {
         for (const room of fs.readdirSync(roomsDir)) {
             total += dirSizeBytes(path.join(roomsDir, room, 'videos'));
         }
-    } catch { /* roomsDir missing */ }
+    } catch {
+        /* roomsDir missing */
+    }
     return total;
 }
 
@@ -2021,7 +2105,9 @@ app.post('/upload', requireRoomAdmin, (req, res) => {
         if (err) {
             console.error('Upload error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(413).json({ error: `File too large. Maximum size is ${Math.round(MAX_UPLOAD_BYTES / (1024 ** 3))}GB.` });
+                return res
+                    .status(413)
+                    .json({ error: `File too large. Maximum size is ${Math.round(MAX_UPLOAD_BYTES / 1024 ** 3)}GB.` });
             }
             return res.status(500).json({ error: 'Upload failed' });
         }
@@ -2086,8 +2172,9 @@ app.post('/upload', requireRoomAdmin, (req, res) => {
 // kept) so uploaded subs in any of those formats actually display.
 function ffmpegConvertSubtitleToVtt(inputPath, outputPath) {
     return new Promise((resolve, reject) => {
-        execFile('ffmpeg', ['-y', '-i', inputPath, '-c:s', 'webvtt', outputPath],
-            { timeout: 60000 }, (err) => err ? reject(err) : resolve());
+        execFile('ffmpeg', ['-y', '-i', inputPath, '-c:s', 'webvtt', outputPath], { timeout: 60000 }, (err) =>
+            err ? reject(err) : resolve()
+        );
     });
 }
 
@@ -2208,12 +2295,12 @@ app.use('/rooms/:roomId/subtitles/:filename', requireRoomAccess, async (req, res
 function convertSrtToVtt(srtContent) {
     let vttContent = 'WEBVTT\n\n';
     const normalizedSrt = srtContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const blocks = normalizedSrt.split(/\n\n+/).filter(block => block.trim());
+    const blocks = normalizedSrt.split(/\n\n+/).filter((block) => block.trim());
 
-    blocks.forEach(block => {
-        const lines = block.split('\n').filter(line => line.trim());
+    blocks.forEach((block) => {
+        const lines = block.split('\n').filter((line) => line.trim());
         if (lines.length >= 2) {
-            let timestampIndex = lines.findIndex(line => line.includes('-->'));
+            let timestampIndex = lines.findIndex((line) => line.includes('-->'));
             if (timestampIndex !== -1) {
                 const timestampLine = lines[timestampIndex];
                 const subtitleLines = lines.slice(timestampIndex + 1);
@@ -2275,7 +2362,7 @@ const ROOM_CLEANUP_INTERVAL = 60 * 1000;
 
 function promoteNextAdmin(room, currentAdminSocketId) {
     const potentialAdmins = Array.from(room.users.values())
-        .filter(user => user.id !== currentAdminSocketId)
+        .filter((user) => user.id !== currentAdminSocketId)
         .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
 
     if (potentialAdmins.length > 0) {
@@ -2325,8 +2412,8 @@ function promoteNextAdmin(room, currentAdminSocketId) {
 
 function generateUniqueName(baseName, existingUsers, excludeSocketId) {
     const existingNames = Array.from(existingUsers.values())
-        .filter(u => u.id !== excludeSocketId)
-        .map(u => u.name);
+        .filter((u) => u.id !== excludeSocketId)
+        .map((u) => u.name);
 
     if (!existingNames.includes(baseName)) {
         return baseName;
@@ -2442,7 +2529,7 @@ io.on('connection', (socket) => {
         room.users.set(socket.id, user);
         room.lastActivity = Date.now();
 
-        const sessionAdmin = ENABLE_TORRENTS ? (session && session.isAdmin) : true;
+        const sessionAdmin = ENABLE_TORRENTS ? session && session.isAdmin : true;
 
         if (finalRole === 'admin' && (!room.adminId || sessionAdmin)) {
             if (!room.adminId) room.adminId = socket.id;
@@ -2456,11 +2543,9 @@ io.on('connection', (socket) => {
             // gate admin-only actions (e.g. subtitle upload) on the public instance
             // — where there is no authenticated admin login, only a client-side
             // "room creator is admin" model.
-            session.isRoomAdmin = (finalRole === 'admin');
+            session.isRoomAdmin = finalRole === 'admin';
             try {
-                await new Promise((resolve, reject) =>
-                    session.save(err => err ? reject(err) : resolve())
-                );
+                await new Promise((resolve, reject) => session.save((err) => (err ? reject(err) : resolve())));
             } catch (err) {
                 console.error(`Session save failed for ${socket.id}:`, err.message);
             }
@@ -2474,11 +2559,13 @@ io.on('connection', (socket) => {
             currentMedia: room.currentMedia,
             videoState: room.videoState,
             isAdmin: socket.id === room.adminId,
-            currentTorrent: room.currentTorrent ? {
-                infoHash: room.currentTorrent.infoHash,
-                name: room.currentTorrent.name,
-                progress: room.currentTorrent.progress
-            } : null,
+            currentTorrent: room.currentTorrent
+                ? {
+                      infoHash: room.currentTorrent.infoHash,
+                      name: room.currentTorrent.name,
+                      progress: room.currentTorrent.progress
+                  }
+                : null,
             subtitles: room.subtitles,
             subtitleOffset: room.subtitleOffset || 0
         });
@@ -2584,8 +2671,12 @@ io.on('connection', (socket) => {
                 // done yet, the watcher polls and extracts on completion. Runs
                 // in parallel with playback/transcoding instead of being
                 // gated on the playback endpoint call.
-                if (extractEmbeddedSubtitles && mediaData?.infoHash !== undefined && mediaData?.fileIndex !== undefined) {
-                    extractEmbeddedSubtitles(mediaData.infoHash, parseInt(mediaData.fileIndex), user.room).catch(e =>
+                if (
+                    extractEmbeddedSubtitles &&
+                    mediaData?.infoHash !== undefined &&
+                    mediaData?.fileIndex !== undefined
+                ) {
+                    extractEmbeddedSubtitles(mediaData.infoHash, parseInt(mediaData.fileIndex), user.room).catch((e) =>
                         console.error(`Eager subtitle extraction failed for ${user.room}:`, e.message)
                     );
                 }
@@ -2718,8 +2809,7 @@ io.on('connection', (socket) => {
         }
 
         const { targetUserName } = data || {};
-        const targetUser = Array.from(room.users.values())
-            .find(u => u.name === targetUserName && u.role === 'guest');
+        const targetUser = Array.from(room.users.values()).find((u) => u.name === targetUserName && u.role === 'guest');
 
         if (!targetUser) {
             socket.emit('transfer-admin-error', { message: 'Target user not found' });
@@ -2791,8 +2881,7 @@ io.on('connection', (socket) => {
         }
 
         const { targetUserName } = data || {};
-        const targetUser = Array.from(room.users.values())
-            .find(u => u.name === targetUserName);
+        const targetUser = Array.from(room.users.values()).find((u) => u.name === targetUserName);
 
         if (!targetUser) {
             socket.emit('kick-user-error', { message: 'Target user not found' });
@@ -2883,7 +2972,7 @@ async function cleanupInactiveRooms() {
     const roomsToDelete = [];
 
     rooms.forEach((room, roomId) => {
-        if (room.users.size === 0 && (now - room.lastActivity) > ROOM_INACTIVITY_TIMEOUT) {
+        if (room.users.size === 0 && now - room.lastActivity > ROOM_INACTIVITY_TIMEOUT) {
             roomsToDelete.push(roomId);
         }
     });
@@ -3014,7 +3103,7 @@ app.get('/api/library/:roomId', requireRoomAccess, (req, res) => {
 
         if (fs.existsSync(videosDir)) {
             const videoFiles = fs.readdirSync(videosDir);
-            videoFiles.forEach(filename => {
+            videoFiles.forEach((filename) => {
                 const filePath = path.join(videosDir, filename);
                 const stats = fs.statSync(filePath);
 
@@ -3022,9 +3111,8 @@ app.get('/api/library/:roomId', requireRoomAccess, (req, res) => {
                     const ext = path.extname(filename).toLowerCase();
                     if (['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v'].includes(ext)) {
                         const parts = filename.split('-');
-                        const displayName = parts.length > 1 && /^\d+$/.test(parts[0])
-                            ? parts.slice(1).join('-')
-                            : filename;
+                        const displayName =
+                            parts.length > 1 && /^\d+$/.test(parts[0]) ? parts.slice(1).join('-') : filename;
 
                         library.uploads.push({
                             filename: filename,
@@ -3065,7 +3153,7 @@ server.listen(PORT, () => {
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down...');
     // Clean up all HLS transcode sessions
-    [...hlsSessions.keys()].forEach(k => stopHlsSession(k));
+    [...hlsSessions.keys()].forEach((k) => stopHlsSession(k));
     if (ENABLE_TORRENTS && torrentClient) {
         torrentClient.destroy();
     }

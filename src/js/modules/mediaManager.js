@@ -3,7 +3,14 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, torrentManager, subtitleManager, uiManager } from '../main.js';
-import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls, teardownPlayers } from './codecUtils.js';
+import {
+    checkCodecSupport,
+    fetchCodecs,
+    buildHlsUrl,
+    startHlsPlayback,
+    destroyHls,
+    teardownPlayers
+} from './codecUtils.js';
 
 // Call at every point where a new media source is being loaded. Aborts any
 // listeners (e.g. deferred force-sync) tied to the previous media so stale
@@ -63,7 +70,9 @@ export class MediaManager {
         xhr.upload.addEventListener('progress', (e) => {
             if (e.lengthComputable) {
                 const percentComplete = Math.round((e.loaded / e.total) * 100);
-                uiManager.updateMediaStatus(`Uploading: ${percentComplete}% (${uiManager.formatBytes(e.loaded)}/${uiManager.formatBytes(e.total)})`);
+                uiManager.updateMediaStatus(
+                    `Uploading: ${percentComplete}% (${uiManager.formatBytes(e.loaded)}/${uiManager.formatBytes(e.total)})`
+                );
                 document.getElementById('progressFill').style.width = percentComplete + '%';
             }
         });
@@ -88,7 +97,9 @@ export class MediaManager {
                     const filename = data.filename;
 
                     const codecs = await fetchCodecs({
-                        source: 'upload', roomId, filename
+                        source: 'upload',
+                        roomId,
+                        filename
                     });
                     const needs = codecs ? checkCodecSupport(codecs) : null;
 
@@ -130,7 +141,6 @@ export class MediaManager {
                     if (torrentInfo) {
                         torrentInfo.classList.add('hidden');
                     }
-
                 } catch (parseError) {
                     console.error('JSON parse error:', parseError);
                     uiManager.showError('Server returned invalid response');
@@ -159,7 +169,6 @@ export class MediaManager {
         xhr.send(formData);
     }
 
-
     loadStreamDirect(streamUrl, streamName) {
         state.isLiveStream = true;
 
@@ -183,22 +192,25 @@ export class MediaManager {
                 let retryCount = 0;
                 const MAX_STREAM_RETRIES = 30;
 
-                const player = mpegts.createPlayer({
-                    type: 'mpegts',
-                    isLive: true,
-                    url: streamUrl
-                }, {
-                    enableWorker: true,
-                    enableStashBuffer: true,
-                    stashInitialSize: 1024 * 1024,
-                    autoCleanupSourceBuffer: true,
-                    autoCleanupMaxBackwardDuration: 60,
-                    autoCleanupMinBackwardDuration: 30,
-                    liveBufferLatencyChasing: true,
-                    liveBufferLatencyMaxLatency: 15,
-                    liveBufferLatencyMinRemain: 5,
-                    fixAudioTimestampGap: true
-                });
+                const player = mpegts.createPlayer(
+                    {
+                        type: 'mpegts',
+                        isLive: true,
+                        url: streamUrl
+                    },
+                    {
+                        enableWorker: true,
+                        enableStashBuffer: true,
+                        stashInitialSize: 1024 * 1024,
+                        autoCleanupSourceBuffer: true,
+                        autoCleanupMaxBackwardDuration: 60,
+                        autoCleanupMinBackwardDuration: 30,
+                        liveBufferLatencyChasing: true,
+                        liveBufferLatencyMaxLatency: 15,
+                        liveBufferLatencyMinRemain: 5,
+                        fixAudioTimestampGap: true
+                    }
+                );
 
                 state.mpegtsPlayer = player;
                 player.attachMediaElement(state.videoPlayer);
@@ -235,18 +247,22 @@ export class MediaManager {
                 // Tied to the current media load: resetMediaLoad aborts this on
                 // every switch, so stale ended-listeners can't stack up across
                 // stream changes and fire against the wrong media.
-                state.videoPlayer.addEventListener('ended', () => {
-                    if (state.mpegtsPlayer === player) {
-                        console.log('Stream ended, attempting to restart...');
-                        setTimeout(() => {
-                            if (state.mpegtsPlayer === player) {
-                                player.unload();
-                                player.load();
-                                player.play().catch(() => {});
-                            }
-                        }, 1000);
-                    }
-                }, { signal: state.mediaLoadAbort?.signal });
+                state.videoPlayer.addEventListener(
+                    'ended',
+                    () => {
+                        if (state.mpegtsPlayer === player) {
+                            console.log('Stream ended, attempting to restart...');
+                            setTimeout(() => {
+                                if (state.mpegtsPlayer === player) {
+                                    player.unload();
+                                    player.load();
+                                    player.play().catch(() => {});
+                                }
+                            }, 1000);
+                        }
+                    },
+                    { signal: state.mediaLoadAbort?.signal }
+                );
 
                 player.play().catch(() => {});
             };
@@ -261,7 +277,7 @@ export class MediaManager {
         state.videoPlayer.oncanplay = () => {
             state.videoPlayer.oncanplay = null;
             uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
-            state.videoPlayer.play().catch(() => { });
+            state.videoPlayer.play().catch(() => {});
         };
 
         state.videoPlayer.onerror = (e) => {
@@ -327,7 +343,10 @@ export class MediaManager {
                     const torrentNeeds = torrentCodecs ? checkCodecSupport(torrentCodecs) : null;
 
                     if (torrentNeeds) {
-                        const hlsUrl = buildHlsUrl({ source: 'torrent', infoHash: ti.infoHash, fileIndex: ti.fileIndex }, torrentNeeds);
+                        const hlsUrl = buildHlsUrl(
+                            { source: 'torrent', infoHash: ti.infoHash, fileIndex: ti.fileIndex },
+                            torrentNeeds
+                        );
                         startHlsPlayback(hlsUrl);
                     } else {
                         state.videoPlayer.src = `/api/torrents/${ti.infoHash}/files/${ti.fileIndex}/stream`;
@@ -365,11 +384,14 @@ export class MediaManager {
                 const fileNeeds = fileCodecs ? checkCodecSupport(fileCodecs) : null;
 
                 if (fileNeeds && fileData.filename) {
-                    const hlsUrl = buildHlsUrl({
-                        source: 'upload',
-                        roomId: state.currentRoomId,
-                        filename: fileData.filename
-                    }, fileNeeds);
+                    const hlsUrl = buildHlsUrl(
+                        {
+                            source: 'upload',
+                            roomId: state.currentRoomId,
+                            filename: fileData.filename
+                        },
+                        fileNeeds
+                    );
                     startHlsPlayback(hlsUrl);
                 } else {
                     state.videoPlayer.src = fileData.url;
@@ -383,7 +405,7 @@ export class MediaManager {
                 break;
             }
 
-            case 'load-stream':
+            case 'load-stream': {
                 if (data.user === state.userName) {
                     break;
                 }
@@ -415,8 +437,9 @@ export class MediaManager {
                     torrentInfoLoadStream.classList.add('hidden');
                 }
                 break;
+            }
 
-            case 'clear-media':
+            case 'clear-media': {
                 state.isLiveStream = false;
                 destroyHls();
                 state.currentTorrentInfo = null;
@@ -430,6 +453,7 @@ export class MediaManager {
                     torrentInfoClearMedia.classList.add('hidden');
                 }
                 break;
+            }
         }
 
         uiManager.updateLastAction(`${data.user} ${data.action.replace('-', ' ')}`);
@@ -448,11 +472,14 @@ export class MediaManager {
         const needs = codecs ? checkCodecSupport(codecs) : null;
 
         if (needs && fileData.filename) {
-            const hlsUrl = buildHlsUrl({
-                source: 'upload',
-                roomId: state.currentRoomId,
-                filename: fileData.filename
-            }, needs);
+            const hlsUrl = buildHlsUrl(
+                {
+                    source: 'upload',
+                    roomId: state.currentRoomId,
+                    filename: fileData.filename
+                },
+                needs
+            );
             startHlsPlayback(hlsUrl);
         } else {
             state.videoPlayer.src = fileData.url;
@@ -475,7 +502,7 @@ export class MediaManager {
             }
 
             if (videoState.isPlaying) {
-                state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
+                state.videoPlayer.play().catch((e) => console.log('Auto-play prevented:', e));
             }
         };
 

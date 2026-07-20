@@ -72,8 +72,8 @@ export class AuthManager {
                 if (info) info.classList.remove('hidden');
                 const hash = state.currentTorrentInfo.infoHash;
                 fetch(`/api/torrents/${hash}/status`, { credentials: 'include' })
-                    .then(r => r.ok ? r.json() : null)
-                    .then(data => {
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((data) => {
                         if (data?.files) torrentManager.displayTorrentFiles(data.files);
                     })
                     .catch(() => {});
@@ -119,7 +119,8 @@ export class AuthManager {
 
         const menu = document.createElement('div');
         menu.id = 'userManagementMenu';
-        menu.className = 'fixed z-[60] surface border hairline rounded-xl shadow-2xl overflow-hidden min-w-[180px] fade-in';
+        menu.className =
+            'fixed z-[60] surface border hairline rounded-xl shadow-2xl overflow-hidden min-w-[180px] fade-in';
 
         // Header showing the target user
         const header = document.createElement('div');
@@ -127,12 +128,15 @@ export class AuthManager {
         const nameEl = document.createElement('span');
         nameEl.className = 'text-neutral-200 font-medium truncate';
         nameEl.textContent = userName;
-        header.append(nameEl, (() => {
-            const role = document.createElement('span');
-            role.className = 'font-mono text-[10px]';
-            role.textContent = '· ' + userRole;
-            return role;
-        })());
+        header.append(
+            nameEl,
+            (() => {
+                const role = document.createElement('span');
+                role.className = 'font-mono text-[10px]';
+                role.textContent = '· ' + userRole;
+                return role;
+            })()
+        );
         menu.appendChild(header);
 
         const actions = [];
@@ -190,7 +194,11 @@ export class AuthManager {
             return;
         }
 
-        if (!confirm(`Are you sure you want to transfer admin rights to ${targetUserName}? You will become a guest user.`)) {
+        if (
+            !confirm(
+                `Are you sure you want to transfer admin rights to ${targetUserName}? You will become a guest user.`
+            )
+        ) {
             return;
         }
 
@@ -232,5 +240,4 @@ export class AuthManager {
             uiManager.updateLastAction(`${kickedUserName} was kicked by ${kickedByAdmin}`);
         }
     }
-
 }

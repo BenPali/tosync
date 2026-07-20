@@ -29,7 +29,6 @@ export class SocketManager {
         });
 
         state.socket.on('room-not-found', () => {
-
             // Check if we came from a direct URL
             const pathParts = window.location.pathname.split('/');
             const roomCode = pathParts[1];
@@ -60,7 +59,7 @@ export class SocketManager {
             uiManager.updateUsersList(data.users);
 
             // Check if our role was changed by the server (auto-promotion)
-            const ourUser = data.users.find(user => user.id === state.socket.id);
+            const ourUser = data.users.find((user) => user.id === state.socket.id);
             if (ourUser && ourUser.role !== state.userRole) {
                 state.userRole = ourUser.role;
                 authManager.updateUIForRole(ourUser.role, state.userName);
@@ -130,7 +129,7 @@ export class SocketManager {
                     state.videoPlayer.playbackRate = data.playbackRate;
                 }
                 if (data.isPlaying && state.videoPlayer.paused) {
-                    state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
+                    state.videoPlayer.play().catch((e) => console.log('Auto-play prevented:', e));
                 } else if (!data.isPlaying && !state.videoPlayer.paused) {
                     state.videoPlayer.pause();
                 }
@@ -138,7 +137,9 @@ export class SocketManager {
                 // Shared timer so an overlapping sync-video window isn't cut
                 // short by this one (and vice versa).
                 clearTimeout(state.receivingSyncTimer);
-                state.receivingSyncTimer = setTimeout(() => { state.isReceivingSync = false; }, 100);
+                state.receivingSyncTimer = setTimeout(() => {
+                    state.isReceivingSync = false;
+                }, 100);
             };
 
             // Seeks are no-ops until the video has seekable metadata.
@@ -210,11 +211,9 @@ export class SocketManager {
         });
 
         // Connection health monitoring
-        state.socket.on('ping', () => {
-        });
+        state.socket.on('ping', () => {});
 
-        state.socket.on('pong', (latency) => {
-        });
+        state.socket.on('pong', (latency) => {});
 
         // Enhanced error handling
         state.socket.on('connect_error', (error) => {
@@ -271,9 +270,7 @@ export class SocketManager {
                     // the position at flush time — a remote seek may have been
                     // applied while this sat queued, and emitting the pre-sync
                     // position would yank the room back.
-                    const flushTime = pending.action === 'seek'
-                        ? pending.time
-                        : state.videoPlayer.currentTime;
+                    const flushTime = pending.action === 'seek' ? pending.time : state.videoPlayer.currentTime;
                     this._emitVideoAction(pending.action, flushTime, pending.playbackRate);
                 }, config.SYNC_THROTTLE_DELAY - elapsed);
             }
@@ -313,8 +310,11 @@ export class SocketManager {
         const actionKey = `${action}-${JSON.stringify(mediaData)}`;
 
         // Prevent duplicate actions within a short time window
-        if (state.lastMediaAction && state.lastMediaAction.key === actionKey &&
-            Date.now() - state.lastMediaAction.timestamp < 2000) {
+        if (
+            state.lastMediaAction &&
+            state.lastMediaAction.key === actionKey &&
+            Date.now() - state.lastMediaAction.timestamp < 2000
+        ) {
             return;
         }
 

@@ -76,7 +76,6 @@ export class TorrentManager {
             }
 
             this.updateTorrentProgressFromServer();
-
         } catch (error) {
             uiManager.showError('Failed to add torrent: ' + error.message);
             console.error('Torrent load error:', error);
@@ -101,7 +100,9 @@ export class TorrentManager {
         uiManager.updateMediaStatus(`Analyzing codecs...`);
 
         const codecs = await fetchCodecs({
-            source: 'torrent', infoHash, fileIndex
+            source: 'torrent',
+            infoHash,
+            fileIndex
         });
 
         const needs = codecs ? checkCodecSupport(codecs) : null;
@@ -137,22 +138,26 @@ export class TorrentManager {
         };
 
         // Broadcast to other clients — include codecs so they can check independently
-        state.videoPlayer.addEventListener('loadedmetadata', () => {
-            socketManager.broadcastMediaAction('load-torrent', {
-                name: state.currentTorrentInfo.name,
-                infoHash: infoHash,
-                fileIndex: fileIndex,
-                fileName: fileName,
-                size: state.currentTorrentInfo.totalLength,
-                codecs: codecs
-            });
+        state.videoPlayer.addEventListener(
+            'loadedmetadata',
+            () => {
+                socketManager.broadcastMediaAction('load-torrent', {
+                    name: state.currentTorrentInfo.name,
+                    infoHash: infoHash,
+                    fileIndex: fileIndex,
+                    fileName: fileName,
+                    size: state.currentTorrentInfo.totalLength,
+                    codecs: codecs
+                });
 
-            if (state.selectedSubtitleId && state.selectedSubtitleId !== 'none') {
-                setTimeout(() => {
-                    subtitleManager.selectSubtitle(state.selectedSubtitleId);
-                }, 100);
-            }
-        }, { once: true });
+                if (state.selectedSubtitleId && state.selectedSubtitleId !== 'none') {
+                    setTimeout(() => {
+                        subtitleManager.selectSubtitle(state.selectedSubtitleId);
+                    }, 100);
+                }
+            },
+            { once: true }
+        );
     }
 
     // -- File picker UI --
@@ -173,7 +178,7 @@ export class TorrentManager {
         }
 
         const isAdmin = state.userRole === 'admin';
-        const hasSeason = files.some(f => f.season != null);
+        const hasSeason = files.some((f) => f.season != null);
 
         if (hasSeason) {
             const seasons = new Map();
@@ -190,7 +195,8 @@ export class TorrentManager {
                 if (sorted.length === 1) details.open = true;
 
                 const summary = document.createElement('summary');
-                summary.className = 'cursor-pointer text-xs text-neutral-400 hover:text-neutral-100 flex justify-between items-center px-4 py-2.5 hover:bg-neutral-100/[0.02] transition select-none';
+                summary.className =
+                    'cursor-pointer text-xs text-neutral-400 hover:text-neutral-100 flex justify-between items-center px-4 py-2.5 hover:bg-neutral-100/[0.02] transition select-none';
                 const seasonLabel = document.createElement('span');
                 seasonLabel.textContent = season === 0 ? 'Other files' : `Season ${season}`;
                 const epCount = document.createElement('span');
@@ -248,23 +254,35 @@ export class TorrentManager {
 
         if (isAdmin) {
             const dlBtn = document.createElement('button');
-            dlBtn.className = 'px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition';
+            dlBtn.className =
+                'px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition';
             dlBtn.textContent = 'DL';
             dlBtn.title = 'Download without playing';
             dlBtn.dataset.role = 'dl-btn';
-            dlBtn.onclick = (e) => { e.stopPropagation(); this._selectFile(file.index); };
+            dlBtn.onclick = (e) => {
+                e.stopPropagation();
+                this._selectFile(file.index);
+            };
 
             const playBtn = document.createElement('button');
-            playBtn.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-400 transition';
+            playBtn.className =
+                'px-2 py-0.5 rounded text-[10px] bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-400 transition';
             playBtn.textContent = 'Play';
             playBtn.dataset.role = 'play-btn';
-            playBtn.onclick = (e) => { e.stopPropagation(); this.playTorrentFile(state.currentTorrentInfo.infoHash, file.index, file.name); };
+            playBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.playTorrentFile(state.currentTorrentInfo.infoHash, file.index, file.name);
+            };
 
             const stopBtn = document.createElement('button');
-            stopBtn.className = 'hidden px-2 py-0.5 rounded text-[10px] bg-red-600/30 hover:bg-red-600/50 text-red-400 transition';
+            stopBtn.className =
+                'hidden px-2 py-0.5 rounded text-[10px] bg-red-600/30 hover:bg-red-600/50 text-red-400 transition';
             stopBtn.textContent = 'Stop';
             stopBtn.dataset.role = 'stop-btn';
-            stopBtn.onclick = (e) => { e.stopPropagation(); this._deselectFile(file.index); };
+            stopBtn.onclick = (e) => {
+                e.stopPropagation();
+                this._deselectFile(file.index);
+            };
 
             buttons.appendChild(dlBtn);
             buttons.appendChild(playBtn);
@@ -290,13 +308,14 @@ export class TorrentManager {
         if (!state.currentTorrentInfo) return;
         // Instant feedback: mark as selected in cached status
         if (this._lastFilesStatus) {
-            const f = this._lastFilesStatus.find(f => f.index === fileIndex);
+            const f = this._lastFilesStatus.find((f) => f.index === fileIndex);
             if (f) f.selected = true;
         }
         this._updateFileRowStates();
         try {
             await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/select`, {
-                method: 'POST', credentials: 'include'
+                method: 'POST',
+                credentials: 'include'
             });
         } catch (e) {
             console.error('Failed to select file:', e);
@@ -307,12 +326,13 @@ export class TorrentManager {
         if (!state.currentTorrentInfo) return;
         // Instant feedback: mark as deselected in cached status
         if (this._lastFilesStatus) {
-            const f = this._lastFilesStatus.find(f => f.index === fileIndex);
+            const f = this._lastFilesStatus.find((f) => f.index === fileIndex);
             if (f) f.selected = false;
         }
         try {
             await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/files/${fileIndex}/deselect`, {
-                method: 'POST', credentials: 'include'
+                method: 'POST',
+                credentials: 'include'
             });
             if (this._playingFileIndex === fileIndex) {
                 this._playingFileIndex = null;
@@ -331,7 +351,8 @@ export class TorrentManager {
         if (state.userRole !== 'admin' || !state.currentTorrentInfo) return;
         try {
             await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}`, {
-                method: 'DELETE', credentials: 'include'
+                method: 'DELETE',
+                credentials: 'include'
             });
             this._playingFileIndex = null;
             this._lastFilesStatus = null;
@@ -427,7 +448,9 @@ export class TorrentManager {
 
         const updateProgress = async () => {
             try {
-                const response = await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/status`, { credentials: 'include' });
+                const response = await fetch(`/api/torrents/${state.currentTorrentInfo.infoHash}/status`, {
+                    credentials: 'include'
+                });
                 if (!response.ok) return;
 
                 const status = await response.json();
@@ -488,7 +511,10 @@ export class TorrentManager {
         const needs = codecs ? checkCodecSupport(codecs) : null;
 
         if (needs) {
-            const hlsUrl = buildHlsUrl({ source: 'torrent', infoHash: info.infoHash, fileIndex: info.fileIndex }, needs);
+            const hlsUrl = buildHlsUrl(
+                { source: 'torrent', infoHash: info.infoHash, fileIndex: info.fileIndex },
+                needs
+            );
             startHlsPlayback(hlsUrl);
         } else {
             state.videoPlayer.src = `/api/torrents/${info.infoHash}/files/${info.fileIndex}/stream`;
@@ -510,7 +536,7 @@ export class TorrentManager {
             }
 
             if (videoState.isPlaying) {
-                state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
+                state.videoPlayer.play().catch((e) => console.log('Auto-play prevented:', e));
             }
         };
 

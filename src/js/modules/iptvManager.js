@@ -1,13 +1,11 @@
 // modules/iptvManager.js - IPTV playlist browser
 
 import { state } from '../state.js';
-import { config } from '../config.js';
 import { socketManager, uiManager } from '../main.js';
 import { destroyHls } from './codecUtils.js';
 import { resetMediaLoad } from './mediaManager.js';
 
 export class IptvManager {
-
     constructor() {
         this.currentPlaylist = null;
         this.searchTimeout = null;
@@ -16,7 +14,9 @@ export class IptvManager {
     async restoreIfCached() {
         if (!state.currentRoomId || this.currentPlaylist) return;
         try {
-            const response = await fetch(`/api/stream/playlist/${state.currentRoomId}/groups`, { credentials: 'include' });
+            const response = await fetch(`/api/stream/playlist/${state.currentRoomId}/groups`, {
+                credentials: 'include'
+            });
             if (!response.ok) return;
             const data = await response.json();
             this.currentPlaylist = data;
@@ -74,7 +74,6 @@ export class IptvManager {
 
             uiManager.updateMediaStatus(`Loaded ${data.channelCount} channels in ${data.groups.length} groups`);
             this.displayChannelBrowser(data.groups);
-
         } catch (err) {
             console.error('Playlist load error:', err);
             uiManager.showError('Failed to load playlist: ' + err.message);
@@ -114,7 +113,8 @@ export class IptvManager {
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.placeholder = 'Search channels…';
-        searchInput.className = 'w-full bg-inset border hairline rounded-lg text-xs text-neutral-200 px-3 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none transition';
+        searchInput.className =
+            'w-full bg-inset border hairline rounded-lg text-xs text-neutral-200 px-3 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none transition';
         searchInput.addEventListener('input', (e) => {
             clearTimeout(this.searchTimeout);
             const query = e.target.value.trim();
@@ -139,12 +139,13 @@ export class IptvManager {
         container.className = 'max-h-72 overflow-y-auto divide-y divide-neutral-100/5';
 
         // Group names come verbatim from the M3U's group-title= attribute.
-        groups.forEach(group => {
+        groups.forEach((group) => {
             const groupEl = document.createElement('details');
             groupEl.dataset.groupName = group.name;
 
             const summary = document.createElement('summary');
-            summary.className = 'cursor-pointer text-xs flex items-center justify-between px-4 py-2 hover:bg-neutral-100/[0.02] transition select-none';
+            summary.className =
+                'cursor-pointer text-xs flex items-center justify-between px-4 py-2 hover:bg-neutral-100/[0.02] transition select-none';
             const nameSpan = document.createElement('span');
             nameSpan.className = 'text-neutral-300 truncate';
             nameSpan.textContent = group.name;
@@ -188,7 +189,7 @@ export class IptvManager {
             container.innerHTML = '';
             container.dataset.loaded = 'true';
 
-            data.channels.forEach(channel => {
+            data.channels.forEach((channel) => {
                 container.appendChild(this.createChannelItem(channel));
             });
         } catch (err) {
@@ -232,7 +233,7 @@ export class IptvManager {
                 return;
             }
 
-            data.results.forEach(channel => {
+            data.results.forEach((channel) => {
                 const item = this.createChannelItem(channel);
                 const groupTag = document.createElement('span');
                 groupTag.className = 'text-[10px] font-mono text-neutral-600 ml-auto shrink-0';
@@ -258,12 +259,14 @@ export class IptvManager {
 
     createChannelItem(channel) {
         const chEl = document.createElement('div');
-        chEl.className = 'flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-neutral-100/[0.03] cursor-pointer transition';
+        chEl.className =
+            'flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-neutral-100/[0.03] cursor-pointer transition';
         chEl.dataset.channelIndex = channel.index;
 
         // Logo placeholder — first 1-2 chars of channel name
         const logo = document.createElement('div');
-        logo.className = 'w-5 h-5 rounded bg-neutral-800 flex items-center justify-center text-[9px] font-mono text-neutral-400 shrink-0 overflow-hidden';
+        logo.className =
+            'w-5 h-5 rounded bg-neutral-800 flex items-center justify-center text-[9px] font-mono text-neutral-400 shrink-0 overflow-hidden';
         if (channel.logo) {
             const img = document.createElement('img');
             img.src = channel.logo;
@@ -335,7 +338,6 @@ export class IptvManager {
 
             uiManager.updateMediaStatus(`Watching: ${streamName}`);
             this.highlightActiveChannel(channelIndex);
-
         } catch (err) {
             console.error('Channel select error:', err);
             uiManager.showError(`Failed to tune channel: ${err.message}`);
@@ -346,7 +348,7 @@ export class IptvManager {
     }
 
     highlightActiveChannel(activeIndex) {
-        document.querySelectorAll('[data-channel-index]').forEach(ch => {
+        document.querySelectorAll('[data-channel-index]').forEach((ch) => {
             const isActive = parseInt(ch.dataset.channelIndex) === activeIndex;
             ch.classList.toggle('bg-primary/[0.08]', isActive);
             // Ensure any lingering "live" marker is cleaned up

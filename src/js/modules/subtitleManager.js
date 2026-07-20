@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
-import { socketManager, uiManager } from '../main.js';
+import { uiManager } from '../main.js';
 import { clampOffset, shiftCueTimes, formatOffset } from './subtitleOffset.js';
 
 export class SubtitleManager {
@@ -69,7 +69,6 @@ export class SubtitleManager {
                     document.getElementById('subtitleLabel').value = '';
 
                     uiManager.updateMediaStatus('✅ Subtitle uploaded: ' + data.label);
-
                 } catch (parseError) {
                     console.error('JSON parse error:', parseError);
                     uiManager.showError('Server returned invalid response');
@@ -91,10 +90,10 @@ export class SubtitleManager {
         state.selectedSubtitleId = subtitleId;
 
         const existingTracks = state.videoPlayer.querySelectorAll('track');
-        existingTracks.forEach(track => track.remove());
+        existingTracks.forEach((track) => track.remove());
 
         if (subtitleId && subtitleId !== 'none') {
-            const subtitle = state.availableSubtitles.find(s => s.filename === subtitleId);
+            const subtitle = state.availableSubtitles.find((s) => s.filename === subtitleId);
             if (subtitle) {
                 this.createSubtitleTrack(subtitle);
             } else {
@@ -102,7 +101,7 @@ export class SubtitleManager {
             }
         } else {
             const tracks = Array.from(state.videoPlayer.textTracks);
-            tracks.forEach(track => track.mode = 'disabled');
+            tracks.forEach((track) => (track.mode = 'disabled'));
             uiManager.updateLastAction('Subtitles disabled');
         }
 
@@ -116,7 +115,7 @@ export class SubtitleManager {
     createSubtitleTrack(subtitle) {
         try {
             const existingTracks = state.videoPlayer.querySelectorAll('track');
-            existingTracks.forEach(track => track.remove());
+            existingTracks.forEach((track) => track.remove());
 
             const track = document.createElement('track');
             track.kind = 'subtitles';
@@ -130,7 +129,7 @@ export class SubtitleManager {
             track.addEventListener('load', () => {
                 setTimeout(() => {
                     const tracks = Array.from(state.videoPlayer.textTracks);
-                    const ourTrack = tracks.find(t => t.label === subtitle.label);
+                    const ourTrack = tracks.find((t) => t.label === subtitle.label);
 
                     if (ourTrack) {
                         ourTrack.mode = 'showing';
@@ -146,7 +145,6 @@ export class SubtitleManager {
                 track.remove();
                 uiManager.showError(`Failed to load subtitle: ${subtitle.label}`);
             });
-
         } catch (error) {
             console.error('Failed to create subtitle track:', error);
             uiManager.showError(`Failed to create subtitle track: ${subtitle.label}`);
@@ -180,8 +178,11 @@ export class SubtitleManager {
     _applyOffsetToActiveTrack() {
         const target = state.subtitleOffset || 0;
         const tracks = state.videoPlayer ? Array.from(state.videoPlayer.textTracks) : [];
-        const track = tracks.find(t => t.mode === 'showing') || tracks[0];
-        if (!track || !track.cues) { this._appliedOffset = target; return; }
+        const track = tracks.find((t) => t.mode === 'showing') || tracks[0];
+        if (!track || !track.cues) {
+            this._appliedOffset = target;
+            return;
+        }
         const delta = target - (this._appliedOffset || 0);
         if (delta !== 0) {
             for (const cue of Array.from(track.cues)) {
@@ -238,7 +239,7 @@ export class SubtitleManager {
         subtitlesList.appendChild(offRow);
 
         // One row per available subtitle
-        state.availableSubtitles.forEach(subtitle => {
+        state.availableSubtitles.forEach((subtitle) => {
             const selected = state.selectedSubtitleId === subtitle.filename;
             const row = makeRow({ selected, onclick: () => this.selectSubtitle(subtitle.filename) });
             row.dataset.subtitleItem = `${subtitle.label} ${subtitle.language}`;
@@ -264,21 +265,25 @@ export class SubtitleManager {
         state.availableSubtitles = [];
         state.selectedSubtitleId = null;
         const existingTracks = state.videoPlayer.querySelectorAll('track');
-        existingTracks.forEach(track => track.remove());
+        existingTracks.forEach((track) => track.remove());
         this.updateSubtitlesList();
     }
 
     toggleSubtitles() {
         const tracks = Array.from(state.videoPlayer.textTracks);
         if (tracks.length > 0) {
-            const currentTrack = tracks.find(track => track.mode === 'showing');
+            const currentTrack = tracks.find((track) => track.mode === 'showing');
             if (currentTrack) {
                 currentTrack.mode = 'disabled';
                 uiManager.updateLastAction('Subtitles disabled');
             } else {
                 let trackToEnable = tracks[0];
                 if (state.selectedSubtitleId && state.selectedSubtitleId !== 'none') {
-                    const selectedTrack = tracks.find(t => t.label === state.availableSubtitles.find(s => s.filename === state.selectedSubtitleId)?.label);
+                    const selectedTrack = tracks.find(
+                        (t) =>
+                            t.label ===
+                            state.availableSubtitles.find((s) => s.filename === state.selectedSubtitleId)?.label
+                    );
                     if (selectedTrack) trackToEnable = selectedTrack;
                 }
                 trackToEnable.mode = 'showing';
@@ -292,9 +297,13 @@ export class SubtitleManager {
 
     checkSubtitleVisibility() {
         const tracks = Array.from(state.videoPlayer.textTracks);
-        const activeTrack = tracks.find(track => track.mode === 'showing');
+        const activeTrack = tracks.find((track) => track.mode === 'showing');
         if (activeTrack) {
-            uiManager.updateLastAction(activeTrack.cues && activeTrack.cues.length > 0 ? `Subtitles active: ${activeTrack.label}` : 'Subtitles loaded (no cues)');
+            uiManager.updateLastAction(
+                activeTrack.cues && activeTrack.cues.length > 0
+                    ? `Subtitles active: ${activeTrack.label}`
+                    : 'Subtitles loaded (no cues)'
+            );
         } else {
             uiManager.updateLastAction('No subtitle track active');
         }

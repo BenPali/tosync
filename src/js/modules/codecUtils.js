@@ -5,17 +5,17 @@ const CODEC_MIME_MAP = {
         h264: 'video/mp4; codecs="avc1.42E01E"',
         hevc: 'video/mp4; codecs="hvc1"',
         h265: 'video/mp4; codecs="hvc1"',
-        vp9:  'video/webm; codecs="vp9"',
-        av1:  'video/mp4; codecs="av01.0.01M.08"',
+        vp9: 'video/webm; codecs="vp9"',
+        av1: 'video/mp4; codecs="av01.0.01M.08"'
     },
     audio: {
-        aac:    'audio/mp4; codecs="mp4a.40.2"',
-        mp3:    'audio/mpeg',
-        opus:   'audio/webm; codecs="opus"',
+        aac: 'audio/mp4; codecs="mp4a.40.2"',
+        mp3: 'audio/mpeg',
+        opus: 'audio/webm; codecs="opus"',
         vorbis: 'audio/webm; codecs="vorbis"',
-        ac3:    'audio/mp4; codecs="ac-3"',
-        eac3:   'audio/mp4; codecs="ec-3"',
-        flac:   'audio/mp4; codecs="flac"',
+        ac3: 'audio/mp4; codecs="ac-3"',
+        eac3: 'audio/mp4; codecs="ec-3"',
+        flac: 'audio/mp4; codecs="flac"'
     }
 };
 
@@ -52,7 +52,7 @@ export async function fetchCodecs(params, maxRetries = 5) {
             const data = await res.json();
             if (data.ready) return { video: data.video, audio: data.audio };
 
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 1000));
         } catch {
             return null;
         }

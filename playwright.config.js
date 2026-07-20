@@ -16,7 +16,7 @@ export default defineConfig({
         baseURL: `http://localhost:${PORT}`,
         headless: true,
         viewport: { width: 1280, height: 800 },
-        trace: 'retain-on-failure',
+        trace: 'retain-on-failure'
     },
     webServer: {
         command: 'node server.js',
@@ -28,7 +28,7 @@ export default defineConfig({
             ENABLE_TORRENTS: 'true',
             SESSION_SECRET: 'e2e-test-secret-0123456789abcdef0123456789abcdef',
             // bcrypt hash of "test123"
-            ADMIN_USERS: '{"admin":"$2b$12$P1SY2qHV.33QbJdNWRBP6eicH43dEcVvMHiL.95V5sN0EqiEKrE9y"}',
-        },
-    },
+            ADMIN_USERS: '{"admin":"$2b$12$P1SY2qHV.33QbJdNWRBP6eicH43dEcVvMHiL.95V5sN0EqiEKrE9y"}'
+        }
+    }
 });

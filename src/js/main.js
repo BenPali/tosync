@@ -22,8 +22,15 @@ let torrentManager = null;
 let iptvManager = null;
 
 export {
-    roomManager, socketManager, videoPlayer, mediaManager,
-    authManager, uiManager, subtitleManager, torrentManager, fileLibraryManager,
+    roomManager,
+    socketManager,
+    videoPlayer,
+    mediaManager,
+    authManager,
+    uiManager,
+    subtitleManager,
+    torrentManager,
+    fileLibraryManager,
     iptvManager
 };
 
@@ -63,7 +70,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (possibleRoomCode && possibleRoomCode.length === config.ROOM_CODE_LENGTH) {
         state.currentRoomId = possibleRoomCode.toUpperCase();
         state.isRoomCreator = false;
-        window.history.replaceState({ roomId: state.currentRoomId, isRoomCreator: false }, '', `/${state.currentRoomId}`);
+        window.history.replaceState(
+            { roomId: state.currentRoomId, isRoomCreator: false },
+            '',
+            `/${state.currentRoomId}`
+        );
         roomManager.proceedToRoleSelection();
     }
 });
@@ -99,14 +110,13 @@ async function handleLogout() {
 
 function syncThemeIcons() {
     const isLight = document.documentElement.classList.contains('light');
-    document.querySelectorAll('[data-theme-icon]').forEach(icon => {
+    document.querySelectorAll('[data-theme-icon]').forEach((icon) => {
         const showInLight = icon.dataset.themeIcon === 'light';
         icon.classList.toggle('hidden', showInLight !== isLight);
     });
 }
 
 function setupUIEventListeners() {
-
     // Theme toggle — theme.js handles the actual class swap + persistence.
     const themeBtn = document.getElementById('themeToggleBtn');
     if (themeBtn && typeof window.__tosyncToggleTheme === 'function') {
@@ -127,23 +137,27 @@ function setupUIEventListeners() {
     if (joinBtn) joinBtn.addEventListener('click', () => roomManager.joinRoom());
 
     const adminJoinBtn = document.getElementById('adminJoinRoomBtn');
-    if (adminJoinBtn) adminJoinBtn.addEventListener('click', () => {
-        const adminCode = document.getElementById('adminRoomCodeInput').value;
-        const mainInput = document.getElementById('roomCodeInput');
-        if (mainInput) mainInput.value = adminCode;
-        roomManager.joinRoom();
-    });
+    if (adminJoinBtn)
+        adminJoinBtn.addEventListener('click', () => {
+            const adminCode = document.getElementById('adminRoomCodeInput').value;
+            const mainInput = document.getElementById('roomCodeInput');
+            if (mainInput) mainInput.value = adminCode;
+            roomManager.joinRoom();
+        });
 
     const badge = document.getElementById('currentRoomCode');
     if (badge) {
         badge.addEventListener('click', () => {
             const roomUrl = `${window.location.origin}/${state.currentRoomId}`;
-            navigator.clipboard.writeText(roomUrl).then(() => {
-                uiManager.toast('success', 'Room URL copied');
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                uiManager.toast('error', 'Could not copy URL');
-            });
+            navigator.clipboard
+                .writeText(roomUrl)
+                .then(() => {
+                    uiManager.toast('success', 'Room URL copied');
+                })
+                .catch((err) => {
+                    console.error('Failed to copy:', err);
+                    uiManager.toast('error', 'Could not copy URL');
+                });
         });
     }
 
@@ -186,7 +200,10 @@ function setupUIEventListeners() {
         });
 
         roomInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
+            e.target.value = e.target.value
+                .replace(/[^a-zA-Z0-9]/g, '')
+                .toUpperCase()
+                .slice(0, config.ROOM_CODE_LENGTH);
         });
 
         roomInput.addEventListener('paste', (e) => {
@@ -205,7 +222,10 @@ function setupUIEventListeners() {
                 }
             }
 
-            e.target.value = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, config.ROOM_CODE_LENGTH);
+            e.target.value = code
+                .replace(/[^a-zA-Z0-9]/g, '')
+                .toUpperCase()
+                .slice(0, config.ROOM_CODE_LENGTH);
         });
     }
 
@@ -213,20 +233,42 @@ function setupUIEventListeners() {
         // Esc always closes the shortcut overlay, even when focus is on input
         if (e.key === 'Escape') {
             const overlay = document.getElementById('shortcutsOverlay');
-            if (overlay) { e.preventDefault(); uiManager.hideShortcutsOverlay(); return; }
+            if (overlay) {
+                e.preventDefault();
+                uiManager.hideShortcutsOverlay();
+                return;
+            }
         }
         // e.target can be the document (no tagName) when an event is dispatched
         // programmatically. Guard with optional chaining.
         const tag = (e.target?.tagName || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea') return;
         switch (e.code) {
-            case 'Space': e.preventDefault(); videoPlayer.togglePlay(); break;
-            case 'ArrowLeft': e.preventDefault(); videoPlayer.seekBackward(); break;
-            case 'ArrowRight': e.preventDefault(); videoPlayer.seekForward(); break;
-            case 'KeyF': e.preventDefault(); videoPlayer.toggleFullscreen(); break;
-            case 'KeyS': e.preventDefault(); subtitleManager.toggleSubtitles(); break;
+            case 'Space':
+                e.preventDefault();
+                videoPlayer.togglePlay();
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                videoPlayer.seekBackward();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                videoPlayer.seekForward();
+                break;
+            case 'KeyF':
+                e.preventDefault();
+                videoPlayer.toggleFullscreen();
+                break;
+            case 'KeyS':
+                e.preventDefault();
+                subtitleManager.toggleSubtitles();
+                break;
             case 'Slash':
-                if (e.shiftKey) { e.preventDefault(); uiManager.showShortcutsOverlay(); }
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    uiManager.showShortcutsOverlay();
+                }
                 break;
         }
     });

@@ -25,7 +25,6 @@ export class FileLibraryManager {
             if (statusElement) {
                 statusElement.textContent = `Loaded ${state.currentLibrary.uploads.length} uploaded files and ${state.currentLibrary.downloads.length} downloaded files`;
             }
-
         } catch (error) {
             console.error('Error loading file library:', error);
             if (statusElement) statusElement.textContent = 'Error loading file library';
@@ -47,7 +46,7 @@ export class FileLibraryManager {
             if (library.uploads.length === 0) {
                 uploadedList.appendChild(emptyMsg('No uploaded files'));
             } else {
-                library.uploads.forEach(file => {
+                library.uploads.forEach((file) => {
                     uploadedList.appendChild(this.createLibraryFileItem(file, 'uploaded'));
                 });
             }
@@ -59,7 +58,7 @@ export class FileLibraryManager {
             if (library.downloads.length === 0) {
                 downloadedList.appendChild(emptyMsg('No downloaded files'));
             } else {
-                library.downloads.forEach(file => {
+                library.downloads.forEach((file) => {
                     downloadedList.appendChild(this.createLibraryFileItem(file, 'downloaded'));
                 });
             }
@@ -74,7 +73,8 @@ export class FileLibraryManager {
 
     createLibraryFileItem(file, type) {
         const fileItem = document.createElement('div');
-        fileItem.className = 'flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100/[0.02] transition cursor-pointer';
+        fileItem.className =
+            'flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100/[0.02] transition cursor-pointer';
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'flex-1 min-w-0';
@@ -155,7 +155,9 @@ export class FileLibraryManager {
         uiManager.updateMediaStatus(`Analyzing codecs...`);
 
         const codecs = await fetchCodecs({
-            source: 'upload', roomId, filename
+            source: 'upload',
+            roomId,
+            filename
         });
         const needs = codecs ? checkCodecSupport(codecs) : null;
 

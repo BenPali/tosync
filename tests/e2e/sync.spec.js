@@ -24,7 +24,7 @@ const VIDEO = path.join(__dirname, '../fixtures/long120.mp4');
 
 async function login(page) {
     const res = await page.request.post('/api/auth/login', {
-        data: { username: 'admin', password: 'test123' },
+        data: { username: 'admin', password: 'test123' }
     });
     expect(res.ok(), 'admin login should succeed').toBeTruthy();
 }
@@ -34,8 +34,9 @@ async function createRoom(page, name = 'SyncSpec') {
     await page.evaluate(async (nm) => {
         document.getElementById('createRoomBtn')?.click();
         await new Promise((r) => setTimeout(r, 300));
-        const inputs = [...document.querySelectorAll('input[type=text], input:not([type])')]
-            .filter((i) => i.offsetParent !== null);
+        const inputs = [...document.querySelectorAll('input[type=text], input:not([type])')].filter(
+            (i) => i.offsetParent !== null
+        );
         if (inputs[0]) {
             inputs[0].value = nm;
             inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
@@ -64,10 +65,14 @@ async function adminUpload(page) {
 
 async function waitVideoReady(page) {
     await expect
-        .poll(() => page.evaluate(() => {
-            const v = document.getElementById('videoPlayer');
-            return v && v.duration > 100 ? v.readyState : 0;
-        }), { timeout: 20_000 })
+        .poll(
+            () =>
+                page.evaluate(() => {
+                    const v = document.getElementById('videoPlayer');
+                    return v && v.duration > 100 ? v.readyState : 0;
+                }),
+            { timeout: 20_000 }
+        )
         .toBeGreaterThanOrEqual(2);
 }
 
@@ -76,8 +81,9 @@ async function waitVideoReady(page) {
 // one-shot sync broadcasts below race-free.
 async function waitForUsers(page, n) {
     await expect
-        .poll(() => page.evaluate(() =>
-            document.getElementById('usersList')?.children.length || 0), { timeout: 10_000 })
+        .poll(() => page.evaluate(() => document.getElementById('usersList')?.children.length || 0), {
+            timeout: 10_000
+        })
         .toBe(n);
 }
 
@@ -117,7 +123,9 @@ test('admin + guest: session sharing, bidirectional sync, throttle, rate, force-
         await waitForUsers(B, 2);
 
         await test.step('restart after fresh load: seek-to-0 reaches the guest', async () => {
-            await B.evaluate(() => { document.getElementById('videoPlayer').muted = true; });
+            await B.evaluate(() => {
+                document.getElementById('videoPlayer').muted = true;
+            });
             await A.evaluate(() => {
                 const v = document.getElementById('videoPlayer');
                 v.muted = true;
@@ -141,7 +149,9 @@ test('admin + guest: session sharing, bidirectional sync, throttle, rate, force-
         });
 
         await test.step('scrubber sync admin -> guest', async () => {
-            await A.evaluate(() => { document.getElementById('videoPlayer').currentTime = 40; });
+            await A.evaluate(() => {
+                document.getElementById('videoPlayer').currentTime = 40;
+            });
             await expect.poll(() => roundTime(B), { timeout: 5_000 }).toBe(40);
         });
 
@@ -150,7 +160,9 @@ test('admin + guest: session sharing, bidirectional sync, throttle, rate, force-
             // seek's echo may still be pending. The old counter-based suppression
             // could consume the guest's own seek in that window (the reason this
             // step once needed a settle); position-matched targets must not.
-            await B.evaluate(() => { document.getElementById('videoPlayer').currentTime = 70; });
+            await B.evaluate(() => {
+                document.getElementById('videoPlayer').currentTime = 70;
+            });
             await expect.poll(() => roundTime(A), { timeout: 5_000 }).toBe(70);
         });
 
@@ -183,8 +195,7 @@ test('admin + guest: session sharing, bidirectional sync, throttle, rate, force-
             await B.evaluate(() => {
                 const v = document.getElementById('videoPlayer');
                 window.__log = [];
-                ['play', 'pause'].forEach((e) =>
-                    v.addEventListener(e, () => window.__log.push({ e, ts: Date.now() })));
+                ['play', 'pause'].forEach((e) => v.addEventListener(e, () => window.__log.push({ e, ts: Date.now() })));
             });
             await A.evaluate(async () => {
                 const v = document.getElementById('videoPlayer');
@@ -204,12 +215,16 @@ test('admin + guest: session sharing, bidirectional sync, throttle, rate, force-
             const log = await B.evaluate(() => window.__log);
             const lastPlay = [...log].reverse().find((e) => e.e === 'play');
             const lastPause = [...log].reverse().find((e) => e.e === 'pause');
-            expect(lastPlay && lastPause && lastPlay.ts > lastPause.ts,
-                'trailing play must arrive after the pause').toBeTruthy();
+            expect(
+                lastPlay && lastPause && lastPlay.ts > lastPause.ts,
+                'trailing play must arrive after the pause'
+            ).toBeTruthy();
         });
 
         await test.step('playback-rate propagates admin -> guest', async () => {
-            await A.evaluate(() => { document.getElementById('videoPlayer').pause(); });
+            await A.evaluate(() => {
+                document.getElementById('videoPlayer').pause();
+            });
             await A.click('#rate15Btn');
             await expect
                 .poll(() => B.evaluate(() => document.getElementById('videoPlayer').playbackRate), { timeout: 5_000 })
@@ -222,7 +237,11 @@ test('admin + guest: session sharing, bidirectional sync, throttle, rate, force-
             // What we can assert end-to-end: clicking the force-sync button emits
             // the admin's current position and the room lands on it. (The apply
             // path itself is the same one covered by every seek test above.)
-            await A.evaluate(() => { const v = document.getElementById('videoPlayer'); v.pause(); v.currentTime = 47; });
+            await A.evaluate(() => {
+                const v = document.getElementById('videoPlayer');
+                v.pause();
+                v.currentTime = 47;
+            });
             await A.waitForTimeout(250);
             await A.click('#syncTimeBtn');
             await expect.poll(() => roundTime(B), { timeout: 5_000 }).toBe(47);
@@ -253,13 +272,17 @@ test('three clients stay in sync', async ({ browser }) => {
         await waitForUsers(A, 3);
 
         await test.step('admin seek reaches both guests', async () => {
-            await A.evaluate(() => { document.getElementById('videoPlayer').currentTime = 33; });
+            await A.evaluate(() => {
+                document.getElementById('videoPlayer').currentTime = 33;
+            });
             await expect.poll(() => roundTime(B), { timeout: 5_000 }).toBe(33);
             await expect.poll(() => roundTime(C), { timeout: 5_000 }).toBe(33);
         });
 
         await test.step('one guest seek reaches the admin and the other guest', async () => {
-            await B.evaluate(() => { document.getElementById('videoPlayer').currentTime = 88; });
+            await B.evaluate(() => {
+                document.getElementById('videoPlayer').currentTime = 88;
+            });
             await expect.poll(() => roundTime(A), { timeout: 5_000 }).toBe(88);
             await expect.poll(() => roundTime(C), { timeout: 5_000 }).toBe(88);
         });

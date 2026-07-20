@@ -6,7 +6,7 @@ const REQUIRED_LENGTH = parseInt('{{ROOM_CODE_LENGTH}}');
     if (!btn) return;
     const sync = () => {
         const isLight = document.documentElement.classList.contains('light');
-        btn.querySelectorAll('[data-theme-icon]').forEach(icon => {
+        btn.querySelectorAll('[data-theme-icon]').forEach((icon) => {
             const showInLight = icon.dataset.themeIcon === 'light';
             icon.classList.toggle('hidden', showInLight !== isLight);
         });
@@ -36,7 +36,7 @@ loginForm.addEventListener('submit', async (e) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
-            credentials: 'include',
+            credentials: 'include'
         });
         const data = await response.json();
         if (response.ok) {

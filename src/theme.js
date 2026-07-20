@@ -5,16 +5,18 @@
 //                      default 'dark' (Catppuccin Mocha).
 (function () {
     var stored;
-    try { stored = localStorage.getItem('tosync-theme'); } catch (e) { stored = null; }
+    try {
+        stored = localStorage.getItem('tosync-theme');
+    } catch (e) {
+        stored = null;
+    }
     var pref = stored;
     if (pref !== 'light' && pref !== 'dark') {
-        pref = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
-            ? 'light'
-            : 'dark';
+        pref = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     }
     var html = document.documentElement;
     html.classList.toggle('light', pref === 'light');
-    html.classList.toggle('dark',  pref === 'dark');
+    html.classList.toggle('dark', pref === 'dark');
 })();
 
 // Public helper — used by main.js / login.js to handle toggle clicks.
@@ -23,7 +25,11 @@ window.__tosyncToggleTheme = function () {
     var nextLight = !html.classList.contains('light');
     html.classList.toggle('light', nextLight);
     html.classList.toggle('dark', !nextLight);
-    try { localStorage.setItem('tosync-theme', nextLight ? 'light' : 'dark'); } catch (e) { /* ignore */ }
+    try {
+        localStorage.setItem('tosync-theme', nextLight ? 'light' : 'dark');
+    } catch (e) {
+        /* ignore */
+    }
     // Broadcast so any open UI (e.g. theme-toggle button icon) can update.
     document.dispatchEvent(new CustomEvent('theme-change', { detail: { theme: nextLight ? 'light' : 'dark' } }));
 };

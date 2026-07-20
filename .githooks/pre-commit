@@ -1,0 +1,12 @@
+#!/bin/sh
+# Conventions are enforced, not aspirational: every commit passes lint + format.
+# Wired automatically for every clone by the npm "prepare" script
+# (git config core.hooksPath .githooks). Bypass in emergencies: git commit -n
+echo "pre-commit: eslint"
+npm run --silent lint || exit 1
+echo "pre-commit: prettier check"
+npx --no-install prettier --check . >/dev/null 2>&1 || {
+    echo "pre-commit: formatting drift detected — run 'npm run format' and re-stage"
+    npx --no-install prettier --check . 2>&1 | grep '^\[warn\]' | head -10
+    exit 1
+}

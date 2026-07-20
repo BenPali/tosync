@@ -1,98 +1,137 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Login · ToSync Advanced</title>
+        <script src="theme.js"></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="styles.css" />
+    </head>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login · ToSync Advanced</title>
-    <script src="theme.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-</head>
-
-<body class="min-h-screen antialiased flex items-center justify-center p-4">
-
-    <div class="w-full max-w-md fade-in">
-
-        <!-- Brand -->
-        <div class="flex items-center justify-center gap-2.5 mb-8">
-            <div class="w-7 h-7 rounded-md bg-primary flex items-center justify-center text-neutral-950 text-xs font-bold">T</div>
-            <span class="text-base font-semibold text-neutral-100">ToSync</span>
-            <span class="text-[10px] text-neutral-500 font-medium px-1.5 py-0.5 rounded bg-neutral-900 border hairline">Advanced</span>
-        </div>
-
-        <div class="surface border hairline rounded-2xl overflow-hidden shadow-2xl">
-
-            <!-- Admin login -->
-            <div class="p-7">
-                <h1 class="text-lg font-semibold text-neutral-100 mb-1">Admin access</h1>
-                <p class="text-sm text-neutral-500 mb-6">Sign in to start a session.</p>
-
-                <form id="loginForm" class="space-y-4">
-                    <div>
-                        <label for="username" class="block text-xs text-neutral-300 mb-1.5">Username</label>
-                        <input type="text" id="username" name="username" required autocomplete="username"
-                            class="w-full bg-inset border hairline rounded-lg text-neutral-100 px-3 py-2.5 placeholder:text-neutral-600 focus-visible:outline-none transition"
-                            placeholder="admin">
-                    </div>
-                    <div>
-                        <label for="password" class="block text-xs text-neutral-300 mb-1.5">Password</label>
-                        <input type="password" id="password" name="password" required autocomplete="current-password"
-                            class="w-full bg-inset border hairline rounded-lg text-neutral-100 px-3 py-2.5 placeholder:text-neutral-600 focus-visible:outline-none transition"
-                            placeholder="••••••••">
-                    </div>
-                    <div id="errorMessage"
-                        class="hidden p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center"></div>
-                    <button type="submit" id="loginBtn"
-                        class="w-full bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40">
-                        Sign in
-                    </button>
-                </form>
+    <body class="min-h-screen antialiased flex items-center justify-center p-4">
+        <div class="w-full max-w-md fade-in">
+            <!-- Brand -->
+            <div class="flex items-center justify-center gap-2.5 mb-8">
+                <div
+                    class="w-7 h-7 rounded-md bg-primary flex items-center justify-center text-neutral-950 text-xs font-bold"
+                >
+                    T
+                </div>
+                <span class="text-base font-semibold text-neutral-100">ToSync</span>
+                <span
+                    class="text-[10px] text-neutral-500 font-medium px-1.5 py-0.5 rounded bg-neutral-900 border hairline"
+                    >Advanced</span
+                >
             </div>
 
-            <!-- OR divider -->
-            <div class="relative px-7">
-                <div class="absolute inset-0 flex items-center"><div class="w-full border-t hairline"></div></div>
-                <div class="relative flex justify-center">
-                    <span class="bg-transparent px-3 text-[10px] uppercase tracking-wider text-neutral-600">or join as guest</span>
+            <div class="surface border hairline rounded-2xl overflow-hidden shadow-2xl">
+                <!-- Admin login -->
+                <div class="p-7">
+                    <h1 class="text-lg font-semibold text-neutral-100 mb-1">Admin access</h1>
+                    <p class="text-sm text-neutral-500 mb-6">Sign in to start a session.</p>
+
+                    <form id="loginForm" class="space-y-4">
+                        <div>
+                            <label for="username" class="block text-xs text-neutral-300 mb-1.5">Username</label>
+                            <input
+                                type="text"
+                                id="username"
+                                name="username"
+                                required
+                                autocomplete="username"
+                                class="w-full bg-inset border hairline rounded-lg text-neutral-100 px-3 py-2.5 placeholder:text-neutral-600 focus-visible:outline-none transition"
+                                placeholder="admin"
+                            />
+                        </div>
+                        <div>
+                            <label for="password" class="block text-xs text-neutral-300 mb-1.5">Password</label>
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                required
+                                autocomplete="current-password"
+                                class="w-full bg-inset border hairline rounded-lg text-neutral-100 px-3 py-2.5 placeholder:text-neutral-600 focus-visible:outline-none transition"
+                                placeholder="••••••••"
+                            />
+                        </div>
+                        <div
+                            id="errorMessage"
+                            class="hidden p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center"
+                        ></div>
+                        <button
+                            type="submit"
+                            id="loginBtn"
+                            class="w-full bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40"
+                        >
+                            Sign in
+                        </button>
+                    </form>
+                </div>
+
+                <!-- OR divider -->
+                <div class="relative px-7">
+                    <div class="absolute inset-0 flex items-center"><div class="w-full border-t hairline"></div></div>
+                    <div class="relative flex justify-center">
+                        <span class="bg-transparent px-3 text-[10px] uppercase tracking-wider text-neutral-600"
+                            >or join as guest</span
+                        >
+                    </div>
+                </div>
+
+                <!-- Guest entry -->
+                <div class="p-7">
+                    <h2 class="text-sm font-medium text-neutral-100 mb-3">Have a room code?</h2>
+                    <div class="space-y-3">
+                        <input
+                            type="text"
+                            id="guestRoomCode"
+                            placeholder="Room code"
+                            maxlength="{{ROOM_CODE_LENGTH}}"
+                            class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-center text-base font-mono uppercase py-2.5 px-3 focus-visible:outline-none transition"
+                        />
+                        <button
+                            id="guestJoinBtn"
+                            class="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 font-semibold py-2.5 rounded-lg transition"
+                        >
+                            Join as guest
+                        </button>
+                        <div
+                            id="guestError"
+                            class="hidden p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center"
+                        ></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Guest entry -->
-            <div class="p-7">
-                <h2 class="text-sm font-medium text-neutral-100 mb-3">Have a room code?</h2>
-                <div class="space-y-3">
-                    <input type="text" id="guestRoomCode" placeholder="Room code" maxlength="{{ROOM_CODE_LENGTH}}"
-                        class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-center text-base font-mono uppercase py-2.5 px-3 focus-visible:outline-none transition">
-                    <button id="guestJoinBtn"
-                        class="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 font-semibold py-2.5 rounded-lg transition">
-                        Join as guest
-                    </button>
-                    <div id="guestError"
-                        class="hidden p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center"></div>
-                </div>
+            <div class="flex items-center justify-center gap-4 mt-6 text-[11px] text-neutral-600">
+                <button
+                    id="themeToggleBtn"
+                    title="Toggle light/dark"
+                    class="flex items-center gap-1 hover:text-neutral-300 transition"
+                    aria-label="Toggle theme"
+                >
+                    <svg data-theme-icon="dark" class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                    <svg data-theme-icon="light" class="hidden w-3 h-3 fill-current" viewBox="0 0 24 24">
+                        <path
+                            d="M12 5a1 1 0 0 1-1-1V2a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1zm0 14a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM5 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zm17 0a1 1 0 0 1-1 1h-2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"
+                        />
+                    </svg>
+                    <span>theme</span>
+                </button>
+                <span>·</span>
+                <span class="font-mono">© 2026 ToSync</span>
             </div>
         </div>
 
-        <div class="flex items-center justify-center gap-4 mt-6 text-[11px] text-neutral-600">
-            <button id="themeToggleBtn" title="Toggle light/dark"
-                class="flex items-center gap-1 hover:text-neutral-300 transition"
-                aria-label="Toggle theme">
-                <svg data-theme-icon="dark" class="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-                <svg data-theme-icon="light" class="hidden w-3 h-3 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 5a1 1 0 0 1-1-1V2a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1zm0 14a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM5 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zm17 0a1 1 0 0 1-1 1h-2a1 1 0 1 1 0-2h2a1 1 0 0 1 1 1zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
-                </svg>
-                <span>theme</span>
-            </button>
-            <span>·</span>
-            <span class="font-mono">© 2026 ToSync</span>
-        </div>
-    </div>
-
-    <script src="login.js"></script>
-</body>
+        <script src="login.js"></script>
+    </body>
 </html>
