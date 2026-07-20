@@ -1,0 +1,67 @@
+# Development environment — the common execution environment for every developer.
+# No VPN sidecar, no .env, no secrets: clone + one command = running app.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+#   public  variant: http://localhost:3000  (anonymous rooms, no torrents)
+#   private variant: http://localhost:3001  (login: admin / test123)
+#
+# Watch mode: the repo is mounted into the containers; nodemon rebuilds the
+# client bundles (node build.js) and restarts the server on every change to
+# server.js / build.js / src/**. Ports bind on all interfaces so the app is
+# reachable from phones/other machines on the LAN for cross-device testing.
+services:
+  tosync-dev-public:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: tosync-dev-public
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - ENABLE_TORRENTS=false
+      - SESSION_SECRET=dev-secret-not-for-production-0123456789abcdef
+      - MAX_UPLOAD_GB=5
+      - MAX_ROOM_STORAGE_GB=10
+      - MAX_TOTAL_STORAGE_GB=20
+    volumes:
+      - .:/app
+      # Container-local overlays: the image's node_modules win over the host's,
+      # and built bundles / room data never touch the host checkout.
+      - /app/node_modules
+      - /app/public
+      - /app/private
+      - dev-rooms-public:/app/rooms
+
+  tosync-dev-private:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: tosync-dev-private
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      # NOTE: dev has NO VPN sidecar (prod routes this variant through gluetun).
+      # Torrent/IPTV UI flows are testable, but don't pull real content here.
+      - ENABLE_TORRENTS=true
+      - SESSION_SECRET=dev-secret-not-for-production-0123456789abcdef
+      # Dev admin login: admin / test123 — same bcrypt hash the e2e suite uses
+      # ($ escaped as $$ for compose variable interpolation).
+      - ADMIN_USERS={"admin":"$$2b$$12$$P1SY2qHV.33QbJdNWRBP6eicH43dEcVvMHiL.95V5sN0EqiEKrE9y"}
+      - MAX_UPLOAD_GB=5
+      - MAX_ROOM_STORAGE_GB=10
+      - MAX_TOTAL_STORAGE_GB=20
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/public
+      - /app/private
+      - dev-rooms-private:/app/rooms
+
+volumes:
+  dev-rooms-public:
+  dev-rooms-private:

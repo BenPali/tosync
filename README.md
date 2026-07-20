@@ -46,6 +46,19 @@ Use https://tosync.org or follow these steps for local use:
    http://localhost:3001
    ```
 
+## Development (Docker)
+
+One command, no `.env`, works the same on every machine:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Both variants run in watch mode (edit `src/` or `server.js` → auto rebuild + restart):
+public on `http://localhost:3000`, private on `http://localhost:3001` (login `admin` / `test123`).
+Ports bind on all interfaces so other devices on your LAN can join rooms during testing.
+The dev setup has **no VPN sidecar** (production routes the private variant through gluetun) — don't pull real torrent content in dev.
+
 ## Usage
 
 1. **Create or join a room** - Create a new room as admin or join an existing one with a room code

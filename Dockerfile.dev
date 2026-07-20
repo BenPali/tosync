@@ -1,0 +1,18 @@
+# Development image — used only by docker-compose.dev.yml.
+# Differences from the production Dockerfile (kept deliberately untouched):
+# - no source COPY: the repo is volume-mounted so edits apply live
+# - no `npm prune --production`: devDeps (nodemon) drive the reload loop
+# - no `node build.js` at image build: the dev loop rebuilds on every change
+FROM node:20-slim
+
+RUN apt-get update && apt-get install -y python3 make g++ ffmpeg && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+COPY package*.json ./
+
+RUN npm ci
+
+CMD ["npm", "run", "dev:docker"]
