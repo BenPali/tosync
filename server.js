@@ -9,6 +9,7 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import session from 'express-session';
+import createMemoryStore from 'memorystore';
 import cookieParser from 'cookie-parser';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
@@ -158,16 +159,37 @@ app.use((req, res, next) => {
     next();
 });
 
-// Create shared session middleware for Express and Socket.IO
+// Create shared session middleware for Express and Socket.IO.
+//
+// saveUninitialized stays TRUE on purpose: it makes the browser hold a session
+// cookie *before* the Socket.IO handshake, so the socket's session.save({roomId})
+// on join-room writes to the same session identity that later HTTP requests read.
+// With it false, the socket and HTTP would land on different session IDs and
+// room-scoped HTTP routes (videos, subtitles, HLS) would 403.
+//
+// The store, however, must NOT be the default express-session MemoryStore: it
+// never prunes expired sessions, so with saveUninitialized:true every anonymous
+// visitor leaks a session object forever -> unbounded heap. memorystore is a
+// drop-in in-memory store that reaps expired entries (checkPeriod), keeping the
+// working set bounded to genuinely-active sessions.
+//
+// Expiry alone bounds session LIFETIME but not creation RATE — with
+// saveUninitialized:true every anonymous hit (crawlers, scanners, asset
+// requests) writes an entry that lives up to maxAge+checkPeriod. Hence the
+// hourly prune and the LRU cap: sustained junk traffic evicts its own oldest
+// junk instead of growing the heap.
+const MemoryStore = createMemoryStore(session);
+const SESSION_MAX_AGE = 24 * 60 * 60 * 1000;
 const sessionMiddleware = session({
     secret: SESSION_SECRET || 'dev-secret-not-for-production',
     resave: false,
     saveUninitialized: true,
     name: 'tosync.sid',
+    store: new MemoryStore({ checkPeriod: 60 * 60 * 1000, max: 50000 }),
     cookie: {
         secure: NODE_ENV === 'production',
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000,
+        maxAge: SESSION_MAX_AGE,
         sameSite: 'lax'
     }
 });
@@ -1238,6 +1260,11 @@ if (ENABLE_TORRENTS) {
 
         if (activeStreams.has(roomId)) {
             const existingStream = activeStreams.get(roomId);
+            // Mark inactive BEFORE aborting: the pump's reconnect guard and its
+            // final cleanup both key off isActive. Without this the orphaned pump
+            // reconnects to upstream forever and, on eventual exit, deletes
+            // whatever now sits at roomId — i.e. the replacement stream.
+            existingStream.isActive = false;
             existingStream.controller.abort();
             activeStreams.delete(roomId);
         }
@@ -1264,10 +1291,19 @@ if (ENABLE_TORRENTS) {
                 contentType: contentType,
                 clients: new Map(),
                 startedAt: Date.now(),
-                isActive: true
+                isActive: true,
+                // When the client count first dropped to 0 (null while watched).
+                // Drives the idle-shutdown grace below.
+                zeroClientsSince: Date.now()
             };
 
             activeStreams.set(roomId, streamInfo);
+
+            // Stop pulling upstream after this long with no connected clients.
+            // Long enough to cover the gap before the first client connects after
+            // load-stream and brief single-viewer reconnects; past it an unwatched
+            // relay is pure bandwidth waste (the old loop pulled 24/7).
+            const STREAM_IDLE_GRACE_MS = 20000;
 
             const pumpSource = async (fetchResponse) => {
                 try {
@@ -1289,6 +1325,19 @@ if (ENABLE_TORRENTS) {
                                 streamInfo.clients.delete(clientId);
                             }
                         }
+
+                        // Idle shutdown: don't keep downloading upstream with no
+                        // viewers. Grace-guarded so transient reconnects survive.
+                        if (streamInfo.clients.size === 0) {
+                            if (streamInfo.zeroClientsSince === null) {
+                                streamInfo.zeroClientsSince = Date.now();
+                            } else if (Date.now() - streamInfo.zeroClientsSince > STREAM_IDLE_GRACE_MS) {
+                                console.log(`Stream relay for room ${roomId} idle (no clients), stopping`);
+                                break;
+                            }
+                        } else if (streamInfo.zeroClientsSince !== null) {
+                            streamInfo.zeroClientsSince = null;
+                        }
                     }
                 } catch (err) {
                     if (err.name !== 'AbortError') {
@@ -1300,26 +1349,32 @@ if (ENABLE_TORRENTS) {
                     console.log(`Stream dropped for room ${roomId}, reconnecting in 3s...`);
                     await new Promise(r => setTimeout(r, 3000));
 
-                    if (!streamInfo.isActive || streamInfo.clients.size === 0) return;
+                    // Re-check after the sleep: a replace/stop/room-cleanup may
+                    // have deactivated this stream, or the last viewer may have
+                    // left. Either way fall THROUGH to the cleanup below — an
+                    // early return here would leave still-attached client
+                    // responses dangling open (frozen video, no error, nobody
+                    // left to end them).
+                    if (streamInfo.isActive && streamInfo.clients.size > 0) {
+                        try {
+                            const newController = new AbortController();
+                            streamInfo.controller = newController;
 
-                    try {
-                        const newController = new AbortController();
-                        streamInfo.controller = newController;
+                            const reconnectResponse = await ssrfSafeFetch(streamUrl, {
+                                signal: newController.signal,
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                                }
+                            });
 
-                        const reconnectResponse = await ssrfSafeFetch(streamUrl, {
-                            signal: newController.signal,
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                            if (reconnectResponse.ok) {
+                                console.log(`Stream reconnected for room ${roomId}`);
+                                return pumpSource(reconnectResponse);
                             }
-                        });
-
-                        if (reconnectResponse.ok) {
-                            console.log(`Stream reconnected for room ${roomId}`);
-                            return pumpSource(reconnectResponse);
-                        }
-                    } catch (reconnectErr) {
-                        if (reconnectErr.name !== 'AbortError') {
-                            console.error(`Stream reconnect failed for room ${roomId}:`, reconnectErr.message);
+                        } catch (reconnectErr) {
+                            if (reconnectErr.name !== 'AbortError') {
+                                console.error(`Stream reconnect failed for room ${roomId}:`, reconnectErr.message);
+                            }
                         }
                     }
                 }
@@ -1330,7 +1385,12 @@ if (ENABLE_TORRENTS) {
                         if (!clientRes.writableEnded) clientRes.end();
                     } catch (e) { }
                 }
-                activeStreams.delete(roomId);
+                // Only clear the map slot if it still points at THIS stream — a
+                // replacement stream may already own roomId (see the replace path
+                // above), and we must not delete someone else's active relay.
+                if (activeStreams.get(roomId) === streamInfo) {
+                    activeStreams.delete(roomId);
+                }
                 console.log(`Stream relay ended for room ${roomId}`);
             };
 
@@ -1372,6 +1432,8 @@ if (ENABLE_TORRENTS) {
 
         const clientId = `${Date.now()}-${Math.random()}`;
         streamInfo.clients.set(clientId, res);
+        // A viewer is back — cancel any pending idle shutdown.
+        streamInfo.zeroClientsSince = null;
 
         console.log(`Client ${clientId} connected to stream relay for room ${roomId} (${streamInfo.clients.size} clients)`);
 
@@ -1638,6 +1700,12 @@ if (ENABLE_TORRENTS) {
         const maxAge = 3 * 60 * 60 * 1000;
 
         activeTorrents.forEach((info, hash) => {
+            // Never destroy a torrent a room is still watching, regardless of age
+            // — a long binge (>3h) must not have its source torn out mid-stream
+            // (that surfaced as sudden 404s on the segment/file routes). Rooms
+            // that leave already drop the torrent via the size===0 path on
+            // room-cleanup; this GC only reaps genuinely orphaned torrents.
+            if (info.rooms && info.rooms.size > 0) return;
             if (now - info.addedAt > maxAge && info.torrent.done) {
                 clearExtractionWatchers(hash);
                 info.torrent.destroy({ destroyStore: false });

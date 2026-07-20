@@ -3,7 +3,7 @@
 import { state } from '../state.js';
 import { config } from '../config.js';
 import { socketManager, torrentManager, subtitleManager, uiManager } from '../main.js';
-import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls } from './codecUtils.js';
+import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyHls, teardownPlayers } from './codecUtils.js';
 
 // Call at every point where a new media source is being loaded. Aborts any
 // listeners (e.g. deferred force-sync) tied to the previous media so stale
@@ -11,6 +11,24 @@ import { checkCodecSupport, fetchCodecs, buildHlsUrl, startHlsPlayback, destroyH
 export function resetMediaLoad() {
     state.mediaLoadAbort?.abort();
     state.mediaLoadAbort = new AbortController();
+    // Universal switch hook: tear down the previous source's players so an old
+    // IPTV/mpegts relay stops pulling bandwidth and its handlers can't re-attach
+    // to the new media. Safe here because every caller runs resetMediaLoad BEFORE
+    // building the new player, so this only ever kills the previous source.
+    teardownPlayers();
+    // A media switch is a clean boundary: pending echo-suppression targets and
+    // queued trailing broadcasts belong to the previous media and must not leak
+    // a stale seek onto the new one. Playhead tracking restarts at 0 (restore
+    // paths queue their load-seek target when they actually seek).
+    state.pendingSeekTargets.length = 0;
+    state.lastPlayheadPosition = 0;
+    state.seekOriginPosition = 0;
+    state.lastSeekedAt = 0;
+    if (state.pendingSyncTimer) {
+        clearTimeout(state.pendingSyncTimer);
+        state.pendingSyncTimer = null;
+    }
+    state.pendingSyncAction = null;
 }
 
 export class MediaManager {
@@ -158,6 +176,13 @@ export class MediaManager {
             mpegts.LoggingControl.enableAll = false;
 
             const createPlayer = () => {
+                // Consecutive failed reconnect attempts before giving up. The
+                // relay idle-stops 20s after its last viewer leaves, after which
+                // every retry is a guaranteed 404 — without a cap this polls a
+                // dead relay every 2s forever.
+                let retryCount = 0;
+                const MAX_STREAM_RETRIES = 30;
+
                 const player = mpegts.createPlayer({
                     type: 'mpegts',
                     isLive: true,
@@ -180,15 +205,25 @@ export class MediaManager {
                 player.load();
 
                 player.on(mpegts.Events.METADATA_ARRIVED, () => {
+                    retryCount = 0;
                     uiManager.updateMediaStatus(`📡 Streaming: ${streamName}`);
                 });
 
+                // Identity guards (=== player, not truthiness): after a stream
+                // switch state.mpegtsPlayer holds the NEXT stream's player, and a
+                // stale handler firing then would resurrect this destroyed one —
+                // re-fetching the old relay in the background.
                 player.on(mpegts.Events.ERROR, (errorType, errorDetail) => {
                     console.error('mpegts.js error:', errorType, errorDetail);
+                    if (state.mpegtsPlayer !== player) return;
                     if (errorType === 'NetworkError' || errorType === 'MediaError') {
+                        if (++retryCount > MAX_STREAM_RETRIES) {
+                            uiManager.showError('Stream unavailable — restart the stream to resume.');
+                            return;
+                        }
                         console.log('Attempting to reconnect stream...');
                         setTimeout(() => {
-                            if (state.mpegtsPlayer) {
+                            if (state.mpegtsPlayer === player) {
                                 player.unload();
                                 player.load();
                                 player.play().catch(() => {});
@@ -197,18 +232,21 @@ export class MediaManager {
                     }
                 });
 
+                // Tied to the current media load: resetMediaLoad aborts this on
+                // every switch, so stale ended-listeners can't stack up across
+                // stream changes and fire against the wrong media.
                 state.videoPlayer.addEventListener('ended', () => {
-                    if (state.mpegtsPlayer) {
+                    if (state.mpegtsPlayer === player) {
                         console.log('Stream ended, attempting to restart...');
                         setTimeout(() => {
-                            if (state.mpegtsPlayer) {
+                            if (state.mpegtsPlayer === player) {
                                 player.unload();
                                 player.load();
                                 player.play().catch(() => {});
                             }
                         }, 1000);
                     }
-                });
+                }, { signal: state.mediaLoadAbort?.signal });
 
                 player.play().catch(() => {});
             };
@@ -427,8 +465,14 @@ export class MediaManager {
             const suffix = needs ? ' (transcoded)' : '';
             uiManager.updateMediaStatus(`Watching: ${fileData.fileName}${suffix}`);
 
-            // Seek AFTER metadata is loaded so the browser honors it (seekable range is known).
-            state.videoPlayer.currentTime = videoState.currentTime || 0;
+            // Seek AFTER metadata is loaded so the browser honors it (seekable
+            // range is known), queueing the echo-suppression target so the
+            // resulting `seeked` is not broadcast to the room (see handleSeeked).
+            const t = videoState.currentTime || 0;
+            if (Math.abs(state.videoPlayer.currentTime - t) > 0.01) {
+                state.pendingSeekTargets.push(t);
+                state.videoPlayer.currentTime = t;
+            }
 
             if (videoState.isPlaying) {
                 state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));

@@ -500,8 +500,14 @@ export class TorrentManager {
             const suffix = needs ? ' (transcoded)' : '';
             uiManager.updateMediaStatus(`Watching: ${info.name}${suffix}`);
 
-            // Seek AFTER metadata is loaded so the browser honors it (seekable range is known).
-            state.videoPlayer.currentTime = videoState.currentTime || 0;
+            // Seek AFTER metadata is loaded so the browser honors it (seekable
+            // range is known), queueing the echo-suppression target so the
+            // resulting `seeked` is not broadcast to the room (see handleSeeked).
+            const t = videoState.currentTime || 0;
+            if (Math.abs(state.videoPlayer.currentTime - t) > 0.01) {
+                state.pendingSeekTargets.push(t);
+                state.videoPlayer.currentTime = t;
+            }
 
             if (videoState.isPlaying) {
                 state.videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));

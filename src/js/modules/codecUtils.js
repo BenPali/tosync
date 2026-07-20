@@ -73,7 +73,12 @@ export function startHlsPlayback(hlsUrl) {
         return false;
     }
 
-    const hls = new Hls();
+    // startPosition 0: an in-progress transcode is an EVENT playlist with no
+    // ENDLIST, which hls.js classifies as live and would otherwise seek to the
+    // live edge on start — a programmatic seek our echo-suppression doesn't
+    // know about, broadcast to the room as a phantom user seek. Everyone starts
+    // at 0; late joiners are moved by the restore/force-sync path.
+    const hls = new Hls({ startPosition: 0 });
     state.hlsInstance = hls;
     hls.loadSource(hlsUrl);
     hls.attachMedia(state.videoPlayer);
@@ -106,5 +111,21 @@ export function destroyHls() {
     if (state.hlsInstance) {
         state.hlsInstance.destroy();
         state.hlsInstance = null;
+    }
+}
+
+// Tear down BOTH streaming players (HLS + mpegts/IPTV). Call on every media
+// switch: otherwise a previous IPTV player keeps pulling its relay in the
+// background and its ended/error handlers re-attach to the newly-loaded media
+// (bandwidth leak + playback hijack). Idempotent.
+export function teardownPlayers() {
+    destroyHls();
+    if (state.mpegtsPlayer) {
+        try {
+            state.mpegtsPlayer.destroy();
+        } catch (e) {
+            // player may already be torn down; nothing to do
+        }
+        state.mpegtsPlayer = null;
     }
 }

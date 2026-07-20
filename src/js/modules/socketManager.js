@@ -119,7 +119,13 @@ export class SocketManager {
 
             const apply = () => {
                 state.isReceivingSync = true;
-                state.videoPlayer.currentTime = data.time;
+                // Queue the echo-suppression target for this programmatic seek
+                // (see handleSeeked) — a flag window can't cover a seek deferred
+                // to loadedmetadata.
+                if (Math.abs(state.videoPlayer.currentTime - data.time) > 0.01) {
+                    state.pendingSeekTargets.push(data.time);
+                    state.videoPlayer.currentTime = data.time;
+                }
                 if (typeof data.playbackRate === 'number') {
                     state.videoPlayer.playbackRate = data.playbackRate;
                 }
@@ -129,7 +135,10 @@ export class SocketManager {
                     state.videoPlayer.pause();
                 }
                 uiManager.updateLastAction(`${data.user} forced sync`);
-                setTimeout(() => { state.isReceivingSync = false; }, 100);
+                // Shared timer so an overlapping sync-video window isn't cut
+                // short by this one (and vice versa).
+                clearTimeout(state.receivingSyncTimer);
+                state.receivingSyncTimer = setTimeout(() => { state.isReceivingSync = false; }, 100);
             };
 
             // Seeks are no-ops until the video has seekable metadata.
@@ -229,17 +238,66 @@ export class SocketManager {
         });
     }
 
-    // Send video actions to server
+    // Send video actions to server.
+    //
+    // Trailing-edge throttle: at most one emit per SYNC_THROTTLE_DELAY, but the
+    // LATEST action in a burst is always delivered at the end of the window.
+    // A plain leading-edge throttle (the old behaviour) dropped the trailing
+    // action outright, so pause-then-play within the window left the room paused
+    // while the sender played, and two quick -10s taps moved the sender -20s but
+    // the room only -10s. Coalescing to the latest action fixes that convergence.
     broadcastVideoAction(action, time, playbackRate) {
-        if (!state.socket || !state.isConnected || state.isReceivingSync) return;
+        // No isReceivingSync gate here: each caller already applies the correct
+        // echo suppression for its event type before calling — handlePlay/Pause/
+        // RateChange check the flag, handleSeeked uses the pendingSeekTargets
+        // queue. Gating again here would also drop a genuine seek made within
+        // the flag's window.
+        if (!state.socket || !state.isConnected) return;
 
         const now = Date.now();
-        if (now - state.lastSyncTime < config.SYNC_THROTTLE_DELAY) {
+        const elapsed = now - state.lastSyncTime;
+
+        if (elapsed < config.SYNC_THROTTLE_DELAY) {
+            // Inside the window: remember this (latest) action and make sure a
+            // single trailing timer is scheduled to flush it when the window ends.
+            state.pendingSyncAction = { action, time, playbackRate };
+            if (!state.pendingSyncTimer) {
+                state.pendingSyncTimer = setTimeout(() => {
+                    state.pendingSyncTimer = null;
+                    const pending = state.pendingSyncAction;
+                    state.pendingSyncAction = null;
+                    if (!pending) return;
+                    // Seeks keep their captured target; play/pause/rate re-read
+                    // the position at flush time — a remote seek may have been
+                    // applied while this sat queued, and emitting the pre-sync
+                    // position would yank the room back.
+                    const flushTime = pending.action === 'seek'
+                        ? pending.time
+                        : state.videoPlayer.currentTime;
+                    this._emitVideoAction(pending.action, flushTime, pending.playbackRate);
+                }, config.SYNC_THROTTLE_DELAY - elapsed);
+            }
             return;
         }
-        state.lastSyncTime = now;
 
+        // This direct emit supersedes anything still queued from the previous
+        // window — cancel it so a late-firing trailing timer can't emit an
+        // OLDER action after this newer one.
+        if (state.pendingSyncTimer) {
+            clearTimeout(state.pendingSyncTimer);
+            state.pendingSyncTimer = null;
+        }
+        state.pendingSyncAction = null;
 
+        this._emitVideoAction(action, time, playbackRate);
+    }
+
+    _emitVideoAction(action, time, playbackRate) {
+        // Re-check liveness: the trailing flush runs later, by which point we may
+        // have disconnected. (Echo suppression is the caller's responsibility —
+        // see broadcastVideoAction.)
+        if (!state.socket || !state.isConnected) return;
+        state.lastSyncTime = Date.now();
         state.socket.emit('video-action', {
             action: action,
             time: time,
