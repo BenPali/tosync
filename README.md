@@ -34,6 +34,8 @@ Use https://tosync.org or follow these steps for local use:
    npm run build
    npm run start:torrent
    ```
+   Admin accounts live in SQLite (`data/tosync.db`). Create one with
+   `node add-admin.js <username>` — no restart needed. (`ADMIN_USERS` in `.env` only seeds an empty database on first boot.)
 
 3. **Open in browser**
 

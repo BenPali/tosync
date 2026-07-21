@@ -53,6 +53,8 @@ services:
       - MAX_TOTAL_STORAGE_GB=${MAX_TOTAL_STORAGE_GB}
     volumes:
       - ./rooms:/app/rooms
+      # SQLite (admin accounts) — must outlive the container
+      - ./data:/app/data
     depends_on:
       gluetun:
         condition: service_healthy

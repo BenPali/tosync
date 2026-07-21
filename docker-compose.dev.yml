@@ -63,7 +63,9 @@ services:
       - /app/public
       - /app/private
       - dev-rooms-private:/app/rooms
+      - dev-data-private:/app/data
 
 volumes:
   dev-rooms-public:
   dev-rooms-private:
+  dev-data-private:

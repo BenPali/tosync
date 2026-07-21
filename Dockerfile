@@ -13,8 +13,9 @@ COPY package*.json ./
 RUN npm ci
 
 COPY server.js ./
+COPY db.js ./
+COPY add-admin.js ./
 COPY build.js ./
-COPY generate-hash.js ./
 COPY tailwind.config.js ./
 COPY src ./src
 

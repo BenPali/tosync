@@ -40,8 +40,9 @@ export default [
     {
         files: [
             'server.js',
+            'db.js',
+            'add-admin.js',
             'build.js',
-            'generate-hash.js',
             'tailwind.config.js',
             'playwright.config.js',
             'vitest.config.js',

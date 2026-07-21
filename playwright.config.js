@@ -28,6 +28,9 @@ export default defineConfig({
             ENABLE_TORRENTS: 'true',
             // CSP opt-in for the ?player=videojs prototype spec
             ENABLE_PLAYER_PROTO: 'true',
+            // Fresh, deterministically-seeded admin DB every run (test-results
+            // is wiped by playwright before each run)
+            DB_PATH: 'test-results/e2e.db',
             SESSION_SECRET: 'e2e-test-secret-0123456789abcdef0123456789abcdef',
             // bcrypt hash of "test123"
             ADMIN_USERS: '{"admin":"$2b$12$P1SY2qHV.33QbJdNWRBP6eicH43dEcVvMHiL.95V5sN0EqiEKrE9y"}'

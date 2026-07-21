@@ -76,8 +76,22 @@ try {
     process.exit(1);
 }
 
+// Admin identities live in SQLite (private build only — the public build has
+// no login). ADMIN_USERS is now only a first-boot seed for an empty database;
+// after that, accounts are managed at runtime (add-admin.js) and survive
+// redeploys. See db.js for the state classification.
+let adminDb = null;
+if (ENABLE_TORRENTS) {
+    adminDb = await import('./db.js');
+    adminDb.initDb();
+    adminDb.seedAdminsFromEnv(ADMIN_USERS);
+    if (adminDb.adminCount() === 0) {
+        console.warn('WARNING: no admin accounts in the database and none to seed — login is impossible');
+    }
+}
+
 console.log(
-    `ToSync ${ENABLE_TORRENTS ? 'Private' : 'Public'} - Port ${PORT} - Admins: ${Object.keys(ADMIN_USERS).length}`
+    `ToSync ${ENABLE_TORRENTS ? 'Private' : 'Public'} - Port ${PORT} - Admins: ${adminDb ? adminDb.adminCount() : 0}`
 );
 
 let WebTorrent, torrentClient, activeTorrents;
@@ -247,8 +261,11 @@ if (ENABLE_TORRENTS) {
             return res.status(400).json({ error: 'Credentials required' });
         }
 
-        const storedPassword = ADMIN_USERS[username];
+        const account = adminDb.getAdmin(username);
+        const storedPassword = account && account.password_hash;
         if (!storedPassword) {
+            // Constant-time-ish: burn a bcrypt compare on unknown users too, so
+            // response timing doesn't reveal whether the username exists.
             try {
                 await bcrypt.compare(password, '$2b$12$LQv3c1yqBwEHpNxVfLnQKOQMZpz1WxIzyMJtf3Fuz7RB.Iy3GnAkO');
             } catch {}
@@ -272,6 +289,7 @@ if (ENABLE_TORRENTS) {
             }
             req.session.isAdmin = true;
             req.session.username = username;
+            adminDb.touchLastLogin(username);
             console.log(`Admin login: ${username} from ${req.ip}`);
             res.json({ success: true, username });
         });
