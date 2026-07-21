@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>ToSync spike — WebRTC peer-to-peer sync</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                background: #111;
+                color: #ddd;
+                max-width: 900px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+            }
+            .peers {
+                display: flex;
+                gap: 1rem;
+            }
+            .peer {
+                flex: 1;
+            }
+            video {
+                width: 100%;
+                background: #000;
+            }
+            button {
+                margin: 0.5rem 0.5rem 0 0;
+                padding: 0.4rem 0.8rem;
+            }
+            .stat {
+                font-family: monospace;
+                font-size: 12px;
+                color: #8f8;
+            }
+            #verdict {
+                font-family: monospace;
+                font-size: 13px;
+                color: #f88;
+                margin-top: 1rem;
+                white-space: pre-line;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Spike: peer-to-peer playback sync (WebRTC DataChannel)</h1>
+        <p>
+            Two REAL RTCPeerConnections in one page — the "signaling server" is a same-page variable, which is itself
+            the first finding: serverless sync is fiction, something must relay the SDP handshake.
+        </p>
+
+        <div class="peers">
+            <div class="peer">
+                <h3>Peer A</h3>
+                <video id="videoA" src="../tests/fixtures/long120.mp4" controls muted preload="auto"></video>
+                <div class="stat" id="statA">–</div>
+            </div>
+            <div class="peer">
+                <h3>Peer B</h3>
+                <video id="videoB" src="../tests/fixtures/long120.mp4" controls muted preload="auto"></video>
+                <div class="stat" id="statB">–</div>
+            </div>
+        </div>
+
+        <button id="conflictBtn" disabled>Simulate simultaneous conflicting seeks (A→30s, B→90s)</button>
+        <div id="verdict"></div>
+
+        <script>
+            const $ = (id) => document.getElementById(id);
+            const videoA = $('videoA');
+            const videoB = $('videoB');
+            const say = (m) => ($('verdict').textContent += m + '\n');
+
+            // ---- "signaling" — in production this is a SERVER. Here it is a
+            // variable, because both peers live in one page. That convenience is
+            // the point: WebRTC removes no server from the architecture, it only
+            // changes what the server does (SDP relay instead of state holder).
+            const pcA = new RTCPeerConnection();
+            const pcB = new RTCPeerConnection();
+            pcA.onicecandidate = (e) => e.candidate && pcB.addIceCandidate(e.candidate);
+            pcB.onicecandidate = (e) => e.candidate && pcA.addIceCandidate(e.candidate);
+
+            // ---- naive symmetric sync protocol over the DataChannel: every peer
+            // both applies and broadcasts. No authority anywhere — each peer's
+            // truth is whatever arrived last.
+            const wire = (channel, video, statEl, name) => {
+                let applying = false; // echo suppression, same problem ToSync solves
+                const send = (action, time) => {
+                    if (channel.readyState === 'open' && !applying) {
+                        channel.send(JSON.stringify({ action, time }));
+                    }
+                };
+                video.addEventListener('play', () => send('play', video.currentTime));
+                video.addEventListener('pause', () => send('pause', video.currentTime));
+                video.addEventListener('seeked', () => send('seek', video.currentTime));
+                channel.onmessage = (e) => {
+                    const { action, time } = JSON.parse(e.data);
+                    applying = true;
+                    if (action === 'play') video.play().catch(() => {});
+                    if (action === 'pause') video.pause();
+                    if (action === 'seek') video.currentTime = time;
+                    setTimeout(() => (applying = false), 150); // the fragile timer, again
+                };
+                setInterval(() => (statEl.textContent = `${name} @ ${video.currentTime.toFixed(2)}s`), 500);
+            };
+
+            // Seeks before metadata are silently dropped by the browser (the
+            // exact pitfall ToSync's seekWhenReady guards) — gate the demo on
+            // both videos being seekable.
+            const armWhenReady = () => {
+                if (!$('conflictBtn').disabled) return;
+                if (videoA.readyState >= 1 && videoB.readyState >= 1) {
+                    $('conflictBtn').disabled = false;
+                    say('both videos seekable — press the button.');
+                }
+            };
+            videoA.addEventListener('loadedmetadata', armWhenReady);
+            videoB.addEventListener('loadedmetadata', armWhenReady);
+
+            const chA = pcA.createDataChannel('sync');
+            chA.onopen = () => say('DataChannel open — 2-peer sync works.');
+            wire(chA, videoA, $('statA'), 'A');
+            pcB.ondatachannel = (e) => wire(e.channel, videoB, $('statB'), 'B');
+
+            (async () => {
+                await pcA.setLocalDescription(await pcA.createOffer());
+                await pcB.setRemoteDescription(pcA.localDescription);
+                await pcB.setLocalDescription(await pcB.createAnswer());
+                await pcA.setRemoteDescription(pcB.localDescription);
+            })();
+
+            // ---- the divergence demo: both users scrub "at the same time".
+            // Each peer applies its own seek, then receives and applies the
+            // other's. They END UP SWAPPED — A lands where B seeked and vice
+            // versa — and stay ~60s apart. No peer is wrong; there is simply no
+            // arbiter. A server holding authoritative videoState IS the arbiter.
+            $('conflictBtn').addEventListener('click', () => {
+                videoA.currentTime = 30;
+                videoB.currentTime = 90;
+                setTimeout(() => {
+                    const a = videoA.currentTime.toFixed(1);
+                    const b = videoB.currentTime.toFixed(1);
+                    say(`after simultaneous seeks: A @ ${a}s, B @ ${b}s -> divergence ${Math.abs(a - b).toFixed(1)}s`);
+                    say('no authority = last-write-wins per peer = permanent desync.');
+                }, 1500);
+            });
+        </script>
+    </body>
+</html>

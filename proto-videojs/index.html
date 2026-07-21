@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>ToSync spike — Video.js player</title>
+        <!-- Pinned version for reproducibility of the study -->
+        <link href="https://vjs.zencdn.net/8.16.1/video-js.css" rel="stylesheet" />
+        <script src="https://vjs.zencdn.net/8.16.1/video.min.js"></script>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                background: #111;
+                color: #ddd;
+                max-width: 720px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+            }
+            /* DEMO 1 — the whole UI is ours to skin (impossible with native controls) */
+            .video-js {
+                --vjs-theme-color: #e11d48;
+            }
+            .video-js .vjs-control-bar {
+                background: rgba(17, 17, 17, 0.85);
+            }
+            .video-js .vjs-play-progress {
+                background: var(--vjs-theme-color);
+            }
+            .video-js .vjs-big-play-button {
+                border-color: var(--vjs-theme-color);
+            }
+            /* DEMO 3 — role-aware UI: guests lose ONLY the scrubber, rest stays */
+            .guest-mode .vjs-progress-control {
+                display: none;
+            }
+            label {
+                display: inline-flex;
+                gap: 0.5rem;
+                margin-top: 1rem;
+            }
+            #log {
+                font-family: monospace;
+                font-size: 12px;
+                color: #888;
+                margin-top: 1rem;
+                white-space: pre-line;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Spike: Video.js as ToSync's player</h1>
+        <p>
+            Three things native <code>&lt;video controls&gt;</code> cannot do, each ~10 lines here: skin the UI, put our
+            own buttons <em>inside</em> the control bar, and remove a single control per user role.
+        </p>
+
+        <video id="player" class="video-js vjs-fill" controls preload="auto" muted width="688" height="387">
+            <source src="../tests/fixtures/long120.mp4" type="video/mp4" />
+        </video>
+
+        <label><input type="checkbox" id="guestToggle" /> Guest mode (no scrubber — sync-room role control)</label>
+        <div id="log"></div>
+
+        <script>
+            const log = (m) => (document.getElementById('log').textContent += m + '\n');
+
+            // DEMO 2 — first-class control-bar extension: ToSync's ±10s and
+            // force-sync actions as real control-bar members. With the native
+            // player these live as separate page buttons OUTSIDE the video and
+            // vanish in fullscreen; here they are part of the player chrome.
+            const Button = videojs.getComponent('Button');
+            class SeekButton extends Button {
+                constructor(player, options) {
+                    super(player, options);
+                    this.controlText(options.delta > 0 ? 'Forward 10s' : 'Back 10s'); // ARIA label for free
+                }
+                buildCSSClass() {
+                    return 'vjs-control vjs-button';
+                }
+                createEl() {
+                    const el = super.createEl();
+                    el.querySelector('.vjs-icon-placeholder').textContent = this.options_.delta > 0 ? '+10' : '-10';
+                    return el;
+                }
+                handleClick() {
+                    this.player().currentTime(this.player().currentTime() + this.options_.delta);
+                }
+            }
+            videojs.registerComponent('SeekButton', SeekButton);
+
+            const player = videojs('player');
+            player.getChild('controlBar').addChild('SeekButton', { delta: -10 }, 1);
+            player.getChild('controlBar').addChild('SeekButton', { delta: 10 }, 2);
+
+            document.getElementById('guestToggle').addEventListener('change', (e) => {
+                player.el().classList.toggle('guest-mode', e.target.checked);
+                log(`role switch: guest=${e.target.checked} (scrubber ${e.target.checked ? 'removed' : 'restored'})`);
+            });
+
+            // THE COST — what the study is really about: Video.js re-emits media
+            // events through its own layer. ToSync's echo suppression depends on
+            // exact native seeking/seeked/timeupdate semantics (abort-coalescing,
+            // pause-queued timeupdates). Every extra layer between the sync engine
+            // and the element is a place those semantics can shift.
+            ['seeking', 'seeked', 'play', 'pause'].forEach((ev) =>
+                player.on(ev, () =>
+                    log(`player event: ${ev} @ ${player.currentTime().toFixed(2)}s (via Video.js layer)`)
+                )
+            );
+            player.ready(() => log(`ready — Video.js ${videojs.VERSION}, UI is DOM (inspect it!)`));
+        </script>
+    </body>
+</html>
