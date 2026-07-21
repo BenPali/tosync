@@ -137,7 +137,7 @@
                         id="roomCodeInput"
                         placeholder="Room code"
                         maxlength="{{ROOM_CODE_LENGTH}}"
-                        class="w-full bg-inset border hairline rounded-xl text-neutral-100 text-center text-lg font-mono py-3 px-4 focus-visible:outline-none uppercase mb-4 transition"
+                        class="w-full bg-inset border hairline rounded-xl text-neutral-100 text-center text-lg font-mono py-3 px-4 uppercase mb-4 transition"
                     />
                     <button
                         id="joinRoomBtn"
@@ -180,7 +180,7 @@
                             id="adminRoomCodeInput"
                             placeholder="Room code"
                             maxlength="{{ROOM_CODE_LENGTH}}"
-                            class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-sm font-mono py-2 px-3 mb-2 uppercase focus-visible:outline-none transition"
+                            class="w-full bg-inset border hairline rounded-lg text-neutral-100 text-sm font-mono py-2 px-3 mb-2 uppercase transition"
                         />
                         <button
                             id="adminJoinRoomBtn"
@@ -220,7 +220,11 @@
                 <!-- Identity strip -->
                 <section class="mb-8 flex flex-wrap items-center justify-between gap-4">
                     <div class="flex items-center gap-4 flex-wrap">
-                        <div id="connectionStatus" class="flex items-center gap-2 text-xs text-neutral-400">
+                        <div
+                            id="connectionStatus"
+                            aria-live="polite"
+                            class="flex items-center gap-2 text-xs text-neutral-400"
+                        >
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             Connecting…
                         </div>
@@ -290,7 +294,9 @@
                                 ></video>
                             </div>
                             <div class="flex items-center gap-3 px-4 py-2 text-xs border-t hairline">
-                                <span id="mediaStatus" class="flex-1 text-neutral-300 truncate">No media</span>
+                                <span id="mediaStatus" aria-live="polite" class="flex-1 text-neutral-300 truncate"
+                                    >No media</span
+                                >
                                 <div class="w-24 h-0.5 bg-neutral-100/5 rounded-full overflow-hidden">
                                     <div
                                         id="progressFill"
@@ -316,6 +322,7 @@
                         >
                             <button
                                 id="togglePlayBtn"
+                                aria-label="Play or pause"
                                 class="flex items-center gap-2 bg-primary hover:opacity-90 text-neutral-950 text-sm font-medium px-5 py-2 rounded-lg transition"
                             >
                                 <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -323,6 +330,7 @@
                             </button>
                             <button
                                 id="seekBackBtn"
+                                aria-label="Back 10 seconds"
                                 title="−10s"
                                 class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
                             >
@@ -332,6 +340,7 @@
                             </button>
                             <button
                                 id="seekForwardBtn"
+                                aria-label="Forward 10 seconds"
                                 title="+10s"
                                 class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
                             >
@@ -373,6 +382,7 @@
                                         <div class="flex items-center gap-1.5">
                                             <button
                                                 id="subtitleOffsetDownBtn"
+                                                aria-label="Subtitle timing 0.5 seconds earlier"
                                                 title="Subtitles earlier (−0.5s)"
                                                 class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline transition"
                                             >
@@ -385,6 +395,7 @@
                                             >
                                             <button
                                                 id="subtitleOffsetUpBtn"
+                                                aria-label="Subtitle timing 0.5 seconds later"
                                                 title="Subtitles later (+0.5s)"
                                                 class="w-7 h-7 flex items-center justify-center rounded-md text-neutral-300 hover:text-neutral-100 hover:bg-neutral-100/5 border hairline transition"
                                             >
@@ -406,13 +417,13 @@
                                                 type="text"
                                                 id="subtitleLanguage"
                                                 placeholder="Lang"
-                                                class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none"
+                                                class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600"
                                             />
                                             <input
                                                 type="text"
                                                 id="subtitleLabel"
                                                 placeholder="Label"
-                                                class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none"
+                                                class="bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-2.5 py-1.5 placeholder:text-neutral-600"
                                             />
                                         </div>
                                         <button
@@ -431,6 +442,7 @@
                             <div id="adminPlayerControls" class="hidden flex items-center gap-1">
                                 <button
                                     id="syncTimeBtn"
+                                    aria-label="Force-sync the room to my position"
                                     title="Force sync"
                                     class="p-2 rounded-lg text-neutral-400 hover:text-primary hover:bg-neutral-100/5 transition"
                                 >
@@ -442,6 +454,7 @@
                                 </button>
                                 <button
                                     id="restartBtn"
+                                    aria-label="Restart video from the beginning"
                                     title="Restart"
                                     class="p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
                                 >
@@ -452,12 +465,14 @@
                                 <div class="flex items-center border hairline rounded-lg overflow-hidden ml-1">
                                     <button
                                         id="rate1Btn"
+                                        aria-label="Playback speed 1x"
                                         class="px-2.5 py-1.5 text-xs font-mono bg-primary/20 text-primary transition"
                                     >
                                         1×
                                     </button>
                                     <button
                                         id="rate15Btn"
+                                        aria-label="Playback speed 1.5x"
                                         class="px-2.5 py-1.5 text-xs font-mono text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-100 transition"
                                     >
                                         1.5×
@@ -467,6 +482,7 @@
 
                             <button
                                 id="fullscreenBtn"
+                                aria-label="Fullscreen"
                                 title="Fullscreen"
                                 class="ml-auto p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-100/5 transition"
                             >
@@ -568,6 +584,7 @@
                                     </button>
                                     <button
                                         id="clearMediaBtn"
+                                        aria-label="Clear current media"
                                         title="Clear current media"
                                         class="p-2 text-neutral-500 hover:text-red-400 hover:bg-neutral-100/5 border hairline rounded-lg transition"
                                     >
@@ -589,7 +606,7 @@
                                     type="text"
                                     id="torrentInput"
                                     placeholder="magnet:?xt=urn:btih:…"
-                                    class="w-full bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-3 py-2 placeholder:text-neutral-600 transition focus-visible:outline-none"
+                                    class="w-full bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-3 py-2 placeholder:text-neutral-600 transition"
                                 />
                                 <button
                                     id="loadTorrentBtn"
@@ -608,7 +625,7 @@
                                     type="text"
                                     id="iptvPlaylistInput"
                                     placeholder="http://host/get.php?type=m3u_plus…"
-                                    class="w-full bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-3 py-2 placeholder:text-neutral-600 transition focus-visible:outline-none"
+                                    class="w-full bg-inset border hairline rounded-lg text-xs font-mono text-neutral-200 px-3 py-2 placeholder:text-neutral-600 transition"
                                 />
                                 <button
                                     id="loadPlaylistBtn"
@@ -672,6 +689,7 @@
         <!-- Toast stack — uiManager injects toasts here -->
         <div
             id="toastStack"
+            aria-live="polite"
             class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)] pointer-events-none"
         ></div>
 

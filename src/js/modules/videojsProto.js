@@ -248,7 +248,8 @@ export async function enableVideoJsProto() {
         panel.appendChild(up);
         panel.appendChild(mk('hr'));
 
-        // Timing — the app's room-synced offset (same API as its G/H buttons).
+        // Timing — the app's room-synced offset (same API as its admin ±
+        // buttons; the G/H keys are the separate per-viewer local nudge).
         const off = state.subtitleOffset || 0;
         const t = mk('div', 'adj');
         t.appendChild(mk('span', 'lbl', 'Timing'));

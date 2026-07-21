@@ -105,6 +105,12 @@ test('critical path: login → room → video → subtitle (picker) → render �
         }));
         expect(after.start).toBeCloseTo(before + 1.0, 2);
         expect(after.readout).toBe('+1.0s');
+
+        // Keyboard path: G (earlier) must mirror the − button exactly.
+        await page.keyboard.press('KeyG');
+        await page.waitForTimeout(200);
+        const afterKey = await page.evaluate(() => document.getElementById('subtitleOffsetReadout').textContent);
+        expect(afterKey).toBe('+0.5s');
     });
 
     await test.step('fullscreen targets the player container', async () => {

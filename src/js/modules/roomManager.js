@@ -32,7 +32,7 @@ export class RoomManager {
                 <div class="mb-5">
                     <label for="adminNameInput" class="block text-xs text-neutral-300 mb-1.5">Display name</label>
                     <input type="text" id="adminNameInput" placeholder="Admin"
-                           class="w-full bg-inset border hairline rounded-lg px-3 py-2.5 text-neutral-100 focus-visible:outline-none transition">
+                           class="w-full bg-inset border hairline rounded-lg px-3 py-2.5 text-neutral-100 transition">
                 </div>
                 <div class="flex gap-2">
                     <button id="createRoomWithNameBtn" class="flex-1 bg-primary hover:opacity-90 text-neutral-950 font-semibold py-2.5 rounded-lg transition shadow-lg shadow-black/40">
@@ -181,7 +181,7 @@ export class RoomManager {
             <div class="mb-5">
                 <label for="guestNameJoin" class="block text-xs text-neutral-300 mb-1.5">Display name</label>
                 <input type="text" id="guestNameJoin" placeholder="Guest"
-                       class="w-full bg-inset border hairline rounded-lg px-3 py-2.5 text-neutral-100 focus-visible:outline-none transition">
+                       class="w-full bg-inset border hairline rounded-lg px-3 py-2.5 text-neutral-100 transition">
             </div>
             <div id="guestJoinError" class="hidden mb-3 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
                 Room not found

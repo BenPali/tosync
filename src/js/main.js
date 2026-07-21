@@ -273,6 +273,18 @@ function setupUIEventListeners() {
                 e.preventDefault();
                 subtitleManager.toggleSubtitles();
                 break;
+            // Subtitle timing nudge — LOCAL, any viewer (personal drift like
+            // Bluetooth audio latency is per-viewer; the admin's ± buttons are
+            // the room-synced control). G = earlier, H = later. Note: a later
+            // room-wide offset broadcast replaces the local nudge.
+            case 'KeyG':
+                e.preventDefault();
+                subtitleManager.setSubtitleOffset((state.subtitleOffset || 0) - 0.5, { broadcast: false });
+                break;
+            case 'KeyH':
+                e.preventDefault();
+                subtitleManager.setSubtitleOffset((state.subtitleOffset || 0) + 0.5, { broadcast: false });
+                break;
             case 'Slash':
                 if (e.shiftKey) {
                     e.preventDefault();

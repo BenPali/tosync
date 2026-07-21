@@ -215,10 +215,16 @@ export class SubtitleManager {
         //   selected → primary-tinted bg + left accent dot
         //   hover → faint white wash
         const makeRow = ({ selected, onclick }) => {
-            const row = document.createElement('div');
-            row.className = selected
-                ? 'flex items-center gap-3 px-4 py-2.5 bg-primary/[0.08] cursor-pointer'
-                : 'flex items-center gap-3 px-4 py-2.5 hover:bg-neutral-100/[0.03] cursor-pointer transition';
+            // Real <button>: keyboard-focusable and Enter/Space-activatable —
+            // a div with onclick is invisible to keyboard and screen readers.
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.setAttribute('aria-pressed', String(!!selected));
+            row.className =
+                (selected
+                    ? 'flex items-center gap-3 px-4 py-2.5 bg-primary/[0.08] cursor-pointer'
+                    : 'flex items-center gap-3 px-4 py-2.5 hover:bg-neutral-100/[0.03] cursor-pointer transition') +
+                ' w-full text-left';
             row.addEventListener('click', onclick);
             return row;
         };

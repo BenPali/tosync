@@ -160,6 +160,8 @@ export class UIManager {
         }[kind] || { border: 'border-neutral-100/10', text: 'text-neutral-200', dot: 'bg-neutral-500' };
 
         const toast = document.createElement('div');
+        // Screen readers: errors interrupt (alert), the rest queue politely.
+        toast.setAttribute('role', kind === 'error' ? 'alert' : 'status');
         toast.className = `surface border ${palette.border} rounded-lg px-3 py-2.5 shadow-2xl flex items-start gap-2.5 pointer-events-auto fade-in`;
 
         const dot = document.createElement('span');
@@ -208,6 +210,7 @@ export class UIManager {
             ['← / →', 'Seek −10s / +10s'],
             ['F', 'Fullscreen'],
             ['S', 'Toggle subtitles'],
+            ['G / H', 'Subtitle timing ±0.5s (just for you)'],
             ['?', 'Show this help'],
             ['Esc', 'Close dialogs']
         ];

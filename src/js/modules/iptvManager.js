@@ -114,7 +114,7 @@ export class IptvManager {
         searchInput.type = 'text';
         searchInput.placeholder = 'Search channels…';
         searchInput.className =
-            'w-full bg-inset border hairline rounded-lg text-xs text-neutral-200 px-3 py-1.5 placeholder:text-neutral-600 focus-visible:outline-none transition';
+            'w-full bg-inset border hairline rounded-lg text-xs text-neutral-200 px-3 py-1.5 placeholder:text-neutral-600 transition';
         searchInput.addEventListener('input', (e) => {
             clearTimeout(this.searchTimeout);
             const query = e.target.value.trim();
@@ -258,9 +258,11 @@ export class IptvManager {
     }
 
     createChannelItem(channel) {
-        const chEl = document.createElement('div');
+        // Real <button> so channels are keyboard-reachable (Tab + Enter).
+        const chEl = document.createElement('button');
+        chEl.type = 'button';
         chEl.className =
-            'flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-neutral-100/[0.03] cursor-pointer transition';
+            'flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-neutral-100/[0.03] cursor-pointer transition w-full text-left';
         chEl.dataset.channelIndex = channel.index;
 
         // Logo placeholder — first 1-2 chars of channel name
