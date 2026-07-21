@@ -48,6 +48,8 @@ services:
       # NOTE: dev has NO VPN sidecar (prod routes this variant through gluetun).
       # Torrent/IPTV UI flows are testable, but don't pull real content here.
       - ENABLE_TORRENTS=true
+      # CSP opt-in for the ?player=videojs comparative-study prototype
+      - ENABLE_PLAYER_PROTO=true
       - SESSION_SECRET=dev-secret-not-for-production-0123456789abcdef
       # Dev admin login: admin / test123 — same bcrypt hash the e2e suite uses
       # ($ escaped as $$ for compose variable interpolation).

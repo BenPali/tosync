@@ -6,8 +6,11 @@ behind a flag** (see below). The default remains native `<video controls>`.
 
 ## The in-app prototype (`?player=videojs`)
 
-The integration map below is not theoretical — it is implemented, feature-flagged:
-append `?player=videojs` to a room URL on the **private** instance and
+The integration map below is not theoretical — it is implemented, feature-flagged
+twice over: the server must run with `ENABLE_PLAYER_PROTO=true` (dev compose and
+e2e config do; production never does, so the production CSP posture is untouched),
+and the client activates per-URL — append `?player=videojs` to a room URL on the
+**private** instance and
 `src/js/modules/videojsProto.js` wraps the existing `#videoPlayer` element with
 the Video.js chrome (skinned bar, in-bar ±10s buttons wired to the app's own
 guarded seek methods). `state.videoPlayer` still points at the same native

@@ -39,6 +39,15 @@ setupPopStateHandler(roomManager);
 document.addEventListener('DOMContentLoaded', async () => {
     state.videoPlayer = document.getElementById('videoPlayer');
 
+    // Comparative-study prototype (see proto-videojs/): ?player=videojs swaps
+    // the player chrome for Video.js WITHOUT touching the sync engine — the
+    // wrapper reuses this same element. Never loaded without the flag.
+    if (new URLSearchParams(location.search).get('player') === 'videojs') {
+        import('./modules/videojsProto.js')
+            .then((m) => m.enableVideoJsProto())
+            .catch((e) => console.error('[proto] Video.js chrome failed, native player kept:', e));
+    }
+
     uiManager.initialize();
     uiManager.updateMediaStatus('Select a room to begin');
     subtitleManager.initialize();

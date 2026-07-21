@@ -136,11 +136,23 @@ app.set('trust proxy', 1);
 const SCRIPT_SRC = ENABLE_TORRENTS
     ? "'self' https://cdn.socket.io https://cdn.jsdelivr.net"
     : "'self' https://cdn.socket.io";
+// The ?player=videojs prototype needs jsdelivr styles + data: fonts
+// (video-js.css and its embedded icon font). That widening is an explicit
+// OPT-IN (ENABLE_PLAYER_PROTO=true — set by the dev compose and the e2e
+// config, never in production .env), so the production CSP posture is
+// unchanged by the prototype's existence. Without the env flag the client
+// flag still no-ops safely: the CDN load is CSP-blocked and the app keeps
+// the native player.
+const PLAYER_PROTO = ENABLE_TORRENTS && process.env.ENABLE_PLAYER_PROTO === 'true';
+const STYLE_SRC = PLAYER_PROTO
+    ? "'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net"
+    : "'self' 'unsafe-inline' https://fonts.googleapis.com";
+const FONT_SRC = PLAYER_PROTO ? "'self' https://fonts.gstatic.com data:" : "'self' https://fonts.gstatic.com";
 const CSP_POLICY = [
     "default-src 'self'",
     `script-src ${SCRIPT_SRC}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    `style-src ${STYLE_SRC}`,
+    `font-src ${FONT_SRC}`,
     "img-src 'self' data: blob:",
     "connect-src 'self' ws: wss:",
     "media-src 'self' blob:",
