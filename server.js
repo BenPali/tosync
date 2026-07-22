@@ -2935,6 +2935,17 @@ io.on('connection', (socket) => {
 
         const kickedSocket = io.sockets.sockets.get(targetUser.id);
         if (kickedSocket) {
+            // Revoke the HTTP session grants too — the socket dies here, but
+            // session.roomId/isRoomAdmin would otherwise keep media-access and
+            // upload rights alive for up to 24h after the kick. (Rejoining
+            // re-grants guest-level access by design — kick is removal from
+            // the room, not a ban.)
+            const kickedSession = kickedSocket.request?.session;
+            if (kickedSession) {
+                kickedSession.roomId = null;
+                kickedSession.isRoomAdmin = false;
+                kickedSession.save(() => {});
+            }
             kickedSocket.disconnect(true);
         }
 

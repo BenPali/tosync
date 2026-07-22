@@ -69,6 +69,11 @@ services:
   tosync-public:
     build: .
     container_name: tosync-public
+    # DELIBERATELY no rooms volume: public rooms are anonymous and in-memory,
+    # so their files are unrecoverable after a restart anyway — persisting them
+    # would only accumulate strangers' uploads forever (there is no boot-time
+    # orphan sweep). Ephemeral by design; the private instance persists because
+    # its room library makes files reachable again after a rejoin.
     ports:
       - "127.0.0.1:3000:3000"
     environment:

@@ -23,7 +23,12 @@ RUN node build.js
 
 RUN npm prune --production
 
-RUN mkdir -p rooms
+# Writable dirs for the non-root runtime user (uid 1000 in node images).
+# NOTE for hosts binding ./rooms and ./data: they must be writable by uid 1000.
+RUN mkdir -p rooms data && chown node:node rooms data
+
+# Never run ffmpeg/ffprobe over untrusted media as root.
+USER node
 
 EXPOSE 3000
 
