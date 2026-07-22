@@ -102,6 +102,19 @@
         box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.25);
         border-color: rgb(var(--color-primary) / 0.4);
     }
+    /* Keyboard focus ring for everything the input rule above doesn't cover
+       (buttons, links, <summary>, tabbable rows). Element-qualified so it beats
+       the `button:focus { outline: none }` suppressor on source order; only
+       :focus-visible, so mouse clicks stay ring-free. */
+    a:focus-visible,
+    button:focus-visible,
+    summary:focus-visible,
+    select:focus-visible,
+    [tabindex]:focus-visible {
+        outline: 2px solid rgb(var(--color-primary));
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
 }
 
 @layer components {
